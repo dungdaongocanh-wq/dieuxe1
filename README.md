@@ -22,9 +22,9 @@ MST: 0107514537 | Cụm Công Nghiệp Hạp Lĩnh, Phường Hạp Lĩnh, Tỉn
 
 - **Frontend**: React + TypeScript + Ant Design + Vite
 - **Backend**: Node.js + Express + TypeScript
-- **Database**: PostgreSQL + Prisma ORM
+- **Database**: MySQL + Prisma ORM
 - **Auth**: JWT + bcrypt
-- **Docker**: docker-compose.yml cho PostgreSQL local
+- **Docker**: docker-compose.postgresql.yml cho PostgreSQL (tùy chọn)
 
 ---
 
@@ -33,7 +33,7 @@ MST: 0107514537 | Cụm Công Nghiệp Hạp Lĩnh, Phường Hạp Lĩnh, Tỉn
 ```
 dieuxe1/
 ├── README.md
-├── docker-compose.yml          ← PostgreSQL local
+├── docker-compose.postgresql.yml  ← PostgreSQL (tùy chọn, không cần khi dùng XAMPP)
 ├── frontend/                   ← React + TypeScript + Ant Design
 │   ├── src/
 │   │   ├── pages/
@@ -73,6 +73,59 @@ dieuxe1/
 
 ## Hướng Dẫn Cài Đặt
 
+## 🚀 Cách chạy với XAMPP (MySQL) — Khuyến nghị cho người mới
+
+### Yêu cầu
+- [Node.js v18+](https://nodejs.org)
+- [XAMPP](https://www.apachefriends.org) (đã cài sẵn MySQL)
+- [Git](https://git-scm.com)
+
+### Bước 1: Tạo database trong phpMyAdmin
+1. Mở XAMPP → Start **MySQL**
+2. Vào http://localhost/phpmyadmin
+3. Tạo database mới: `dna_express_db` (Collation: `utf8mb4_unicode_ci`)
+
+### Bước 2: Clone và cài đặt
+```bash
+git clone https://github.com/dungdaongocanh-wq/dieuxe1.git
+cd dieuxe1
+```
+
+### Bước 3: Cài đặt Backend
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Mở file .env và kiểm tra DATABASE_URL
+npx prisma migrate dev --name init
+npx prisma db seed
+npm run dev
+```
+Backend chạy tại: http://localhost:3001
+
+### Bước 4: Cài đặt Frontend (Terminal mới)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Frontend chạy tại: http://localhost:5173
+
+### Bước 5: Đăng nhập
+Truy cập http://localhost:5173
+
+| Tài khoản | Mật khẩu | Vai trò |
+|-----------|----------|---------|
+| admin | Admin@123 | Quản lý cấp cao |
+| ketoan | Ketoan@123 | Kế toán |
+| quanly | Quanly@123 | Quản lý lái xe |
+| nguyenvankham | Driver@123 | Lái xe |
+| phamvandiep | Driver@123 | Lái xe |
+
+---
+
+## Cách chạy với Docker (PostgreSQL) — Tùy chọn nâng cao
+
 ### Yêu Cầu Hệ Thống
 
 - Node.js >= 18.x
@@ -89,7 +142,7 @@ cd dieuxe1
 ### Bước 2: Khởi động PostgreSQL
 
 ```bash
-docker-compose up -d
+docker-compose -f docker-compose.postgresql.yml up -d
 ```
 
 PostgreSQL sẽ chạy tại: `localhost:5432`
@@ -99,7 +152,8 @@ PostgreSQL sẽ chạy tại: `localhost:5432`
 ```bash
 cd backend
 cp .env.example .env
-# Chỉnh sửa .env nếu cần (DATABASE_URL, JWT_SECRET, PORT)
+# Chỉnh sửa .env: đặt DATABASE_URL trỏ đến PostgreSQL
+# Ví dụ: DATABASE_URL="postgresql://dnaexpress:dnaexpress123@localhost:5432/dna_express_db"
 npm install
 ```
 
@@ -217,8 +271,8 @@ GET    /api/reports/dashboard
 ### Backend (.env)
 
 ```env
-DATABASE_URL="postgresql://dnaexpress:dnaexpress123@localhost:5432/dna_express_db"
-JWT_SECRET="your_super_secret_jwt_key_change_this_in_production"
+DATABASE_URL="mysql://root:@localhost:3306/dna_express_db"
+JWT_SECRET="dna_express_secret_key_change_in_production"
 PORT=3001
 NODE_ENV=development
 ```
