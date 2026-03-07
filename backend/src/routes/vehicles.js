@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
  */
 router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
   try {
-    const { license_plate, vehicle_type, notes, fuel_rate, price_per_km } = req.body;
+    const { license_plate, vehicle_type, notes, fuel_rate, payload_tons, registration_expiry, insurance_expiry } = req.body;
 
     if (!license_plate) {
       return res.status(400).json({ message: 'Biển số xe là bắt buộc' });
@@ -41,10 +41,13 @@ router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
     }
 
     const result = db.prepare(
-      'INSERT INTO vehicles (license_plate, vehicle_type, notes, fuel_rate, price_per_km) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO vehicles (license_plate, vehicle_type, notes, fuel_rate, price_per_km, payload_tons, registration_expiry, insurance_expiry) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(license_plate, vehicle_type || null, notes || null,
           fuel_rate !== undefined ? parseFloat(fuel_rate) : 8.5,
-          price_per_km !== undefined ? parseFloat(price_per_km) : 10000);
+          0, // price_per_km: ẩn khỏi form, dùng giá trị default 0
+          payload_tons != null && payload_tons !== '' ? parseFloat(payload_tons) : null,
+          registration_expiry || null,
+          insurance_expiry || null);
 
     const newVehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(newVehicle);
@@ -61,7 +64,7 @@ router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
 router.put('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
   try {
     const { id } = req.params;
-    const { license_plate, vehicle_type, notes, is_active, fuel_rate, price_per_km } = req.body;
+    const { license_plate, vehicle_type, notes, is_active, fuel_rate, payload_tons, registration_expiry, insurance_expiry } = req.body;
 
     const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
     if (!vehicle) {
@@ -78,7 +81,8 @@ router.put('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
 
     db.prepare(`
       UPDATE vehicles SET
-        license_plate = ?, vehicle_type = ?, notes = ?, is_active = ?, fuel_rate = ?, price_per_km = ?
+        license_plate = ?, vehicle_type = ?, notes = ?, is_active = ?, fuel_rate = ?, price_per_km = ?,
+        payload_tons = ?, registration_expiry = ?, insurance_expiry = ?
       WHERE id = ?
     `).run(
       license_plate || vehicle.license_plate,
@@ -86,7 +90,10 @@ router.put('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
       notes !== undefined ? notes : vehicle.notes,
       is_active !== undefined ? is_active : vehicle.is_active,
       fuel_rate !== undefined ? parseFloat(fuel_rate) : vehicle.fuel_rate,
-      price_per_km !== undefined ? parseFloat(price_per_km) : vehicle.price_per_km,
+      vehicle.price_per_km,
+      payload_tons !== undefined ? (payload_tons != null && payload_tons !== '' ? parseFloat(payload_tons) : null) : vehicle.payload_tons,
+      registration_expiry !== undefined ? (registration_expiry || null) : vehicle.registration_expiry,
+      insurance_expiry !== undefined ? (insurance_expiry || null) : vehicle.insurance_expiry,
       id
     );
 
