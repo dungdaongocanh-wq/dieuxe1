@@ -135,6 +135,27 @@ function initializeDatabase() {
   if (!scheduleColumns.includes('fuel_consumed')) {
     db.exec('ALTER TABLE schedules ADD COLUMN fuel_consumed REAL');
   }
+  if (!scheduleColumns.includes('customer_id')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN customer_id INTEGER REFERENCES customers(id)');
+  }
+  if (!scheduleColumns.includes('toll_fee')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN toll_fee REAL DEFAULT 0');
+  }
+
+  // Bảng cấu hình giá theo xe / khách hàng
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_vehicle_pricing (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL,
+      vehicle_id INTEGER NOT NULL,
+      combo_km_threshold REAL,
+      combo_price REAL,
+      price_per_km_after REAL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id),
+      FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+    )
+  `);
 
   // Kiểm tra và thêm dữ liệu mẫu nếu chưa có
   seedData();

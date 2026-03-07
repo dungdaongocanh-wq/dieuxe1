@@ -14,12 +14,71 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [vehicles, setVehicles] = useState([]);
+  const [pricingRows, setPricingRows] = useState([]);
+  const [existingPricing, setExistingPricing] = useState([]);
+
+  useEffect(() => {
+    const fetchVehicles = async () => {
+      try {
+        const res = await fetch('/api/vehicles', { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setVehicles(data.filter(v => v.is_active));
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải xe:', err);
+      }
+    };
+
+    const fetchPricing = async () => {
+      if (!customerToEdit) return;
+      try {
+        const res = await fetch(`/api/customers/${customerToEdit.id}/pricing`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setExistingPricing(data);
+          setPricingRows(data.map(p => ({
+            id: p.id,
+            vehicle_id: p.vehicle_id,
+            combo_km_threshold: p.combo_km_threshold ?? '',
+            combo_price: p.combo_price ?? '',
+            price_per_km_after: p.price_per_km_after ?? '',
+            isExisting: true
+          })));
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải cấu hình giá:', err);
+      }
+    };
+
+    fetchVehicles();
+    fetchPricing();
+  }, [customerToEdit]);
+
+  const addPricingRow = () => {
+    setPricingRows(prev => [...prev, {
+      tempId: Date.now(),
+      vehicle_id: '',
+      combo_km_threshold: '',
+      combo_price: '',
+      price_per_km_after: '',
+      isExisting: false
+    }]);
+  };
+
+  const removePricingRow = (index) => {
+    setPricingRows(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updatePricingRow = (index, field, value) => {
+    setPricingRows(prev => prev.map((row, i) => i === index ? { ...row, [field]: value } : row));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Kiểm tra dữ liệu bắt buộc
     if (!formData.short_name.trim() || !formData.company_name.trim()) {
       setError('Tên viết tắt và tên công ty là bắt buộc');
       return;
@@ -42,6 +101,44 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
         return;
       }
 
+      const savedCustomerId = data.id;
+
+      // Xử lý cấu hình giá
+      for (const row of pricingRows) {
+        if (!row.vehicle_id) continue;
+        const pricingPayload = {
+          vehicle_id: parseInt(row.vehicle_id),
+          combo_km_threshold: row.combo_km_threshold !== '' ? parseFloat(row.combo_km_threshold) : null,
+          combo_price: row.combo_price !== '' ? parseFloat(row.combo_price) : null,
+          price_per_km_after: row.price_per_km_after !== '' ? parseFloat(row.price_per_km_after) : null
+        };
+
+        if (row.isExisting && row.id) {
+          await fetch(`/api/customers/${savedCustomerId}/pricing/${row.id}`, {
+            method: 'PUT',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(pricingPayload)
+          });
+        } else {
+          await fetch(`/api/customers/${savedCustomerId}/pricing`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify(pricingPayload)
+          });
+        }
+      }
+
+      // Xóa các dòng pricing đã bị xóa khỏi UI
+      for (const ep of existingPricing) {
+        const stillExists = pricingRows.some(r => r.isExisting && r.id === ep.id);
+        if (!stillExists) {
+          await fetch(`/api/customers/${savedCustomerId}/pricing/${ep.id}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+          });
+        }
+      }
+
       onSave(data, !!customerToEdit);
     } catch {
       setError('Không thể kết nối đến server');
@@ -51,8 +148,8 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-4">
+      <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           {customerToEdit ? '✏️ Sửa Khách Hàng' : '➕ Thêm Khách Hàng'}
         </h3>
@@ -148,6 +245,98 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
             <label htmlFor="cust_is_active" className="text-sm text-gray-700">
               Khách hàng đang hoạt động
             </label>
+          </div>
+
+          {/* Cấu hình đơn giá theo xe */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-700">Cấu hình đơn giá theo xe</h4>
+              <button
+                type="button"
+                onClick={addPricingRow}
+                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1 rounded-md font-medium transition-colors"
+              >
+                + Thêm dòng
+              </button>
+            </div>
+            {pricingRows.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-2">Chưa có cấu hình giá nào</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-500 border-b">
+                      <th className="text-left py-1 pr-2 font-medium">Chọn Xe</th>
+                      <th className="text-left py-1 pr-2 font-medium">Dưới bao nhiêu km (combo)</th>
+                      <th className="text-left py-1 pr-2 font-medium">Giá combo (VNĐ)</th>
+                      <th className="text-left py-1 pr-2 font-medium">Sau đó /km (VNĐ)</th>
+                      <th className="py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pricingRows.map((row, idx) => (
+                      <tr key={row.id || row.tempId} className="border-b border-gray-100">
+                        <td className="pr-2 py-1">
+                          <select
+                            value={row.vehicle_id}
+                            onChange={e => updatePricingRow(idx, 'vehicle_id', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                          >
+                            <option value="">-- Chọn xe --</option>
+                            {vehicles.map(v => (
+                              <option key={v.id} value={v.id}>{v.license_plate}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="pr-2 py-1">
+                          <input
+                            type="number"
+                            value={row.combo_km_threshold}
+                            onChange={e => updatePricingRow(idx, 'combo_km_threshold', e.target.value)}
+                            min="0"
+                            step="0.1"
+                            placeholder="VD: 50"
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                          />
+                        </td>
+                        <td className="pr-2 py-1">
+                          <input
+                            type="number"
+                            value={row.combo_price}
+                            onChange={e => updatePricingRow(idx, 'combo_price', e.target.value)}
+                            min="0"
+                            step="1000"
+                            placeholder="VD: 500000"
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                          />
+                        </td>
+                        <td className="pr-2 py-1">
+                          <input
+                            type="number"
+                            value={row.price_per_km_after}
+                            onChange={e => updatePricingRow(idx, 'price_per_km_after', e.target.value)}
+                            min="0"
+                            step="100"
+                            placeholder="VD: 10000"
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                          />
+                        </td>
+                        <td className="py-1">
+                          <button
+                            type="button"
+                            onClick={() => removePricingRow(idx)}
+                            className="text-red-500 hover:text-red-700 p-1 rounded"
+                            title="Xóa dòng"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">

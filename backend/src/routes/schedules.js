@@ -9,6 +9,54 @@ const { requireRole } = require('../middleware/roleCheck');
 router.use(authenticateToken);
 
 /**
+ * GET /api/schedules/stats/by-customer
+ * Thống kê tổng hợp theo khách hàng
+ * Nhận query params: month (YYYY-MM), vehicle_id, driver_id
+ */
+router.get('/stats/by-customer', requireRole('admin', 'fleet_manager', 'accountant'), (req, res) => {
+  try {
+    const conditions = ['c.id IS NOT NULL'];
+    const params = [];
+
+    if (req.query.month) {
+      conditions.push("strftime('%Y-%m', s.trip_date) = ?");
+      params.push(req.query.month);
+    }
+    if (req.query.vehicle_id) {
+      conditions.push('s.vehicle_id = ?');
+      params.push(req.query.vehicle_id);
+    }
+    if (req.query.driver_id) {
+      conditions.push('s.driver_id = ?');
+      params.push(req.query.driver_id);
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const stats = db.prepare(`
+      SELECT
+        c.id as customer_id,
+        c.short_name as customer_short_name,
+        c.company_name as customer_company_name,
+        COUNT(s.id) as total_trips,
+        COALESCE(SUM(s.km_total), 0) as total_km,
+        COALESCE(SUM(s.toll_fee), 0) as total_toll_fee,
+        COALESCE(SUM(s.fuel_consumed), 0) as total_fuel_consumed
+      FROM schedules s
+      JOIN customers c ON s.customer_id = c.id
+      ${where}
+      GROUP BY c.id, c.short_name, c.company_name
+      ORDER BY c.short_name
+    `).all(...params);
+
+    res.json(stats);
+  } catch (err) {
+    console.error('Lỗi khi lấy thống kê theo khách hàng:', err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+});
+
+/**
  * GET /api/schedules
  * Lấy danh sách lịch trình
  * - Driver chỉ xem lịch trình của mình
@@ -23,10 +71,13 @@ router.get('/', (req, res) => {
              v.license_plate, 
              v.vehicle_type,
              v.fuel_rate,
-             v.price_per_km
+             v.price_per_km,
+             c.short_name as customer_short_name,
+             c.company_name as customer_company_name
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
     `;
 
     const params = [];
@@ -102,7 +153,9 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
       destination_point,
       km_start,
       km_end,
-      notes
+      notes,
+      customer_id,
+      toll_fee
     } = req.body;
 
     // Xác định driver_id: driver chỉ được tạo cho chính mình
@@ -110,7 +163,7 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
 
     // Kiểm tra dữ liệu bắt buộc
     if (!vehicle_id || !trip_date || !departure_point || !destination_point ||
-        km_start === undefined || km_end === undefined) {
+        km_start === undefined || km_end === undefined || !customer_id) {
       return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin bắt buộc' });
     }
 
@@ -133,17 +186,20 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
 
     const result = db.prepare(`
       INSERT INTO schedules 
-        (driver_id, vehicle_id, trip_date, departure_point, destination_point, km_start, km_end, km_total, amount_before_tax, fuel_consumed, notes, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        (driver_id, vehicle_id, trip_date, departure_point, destination_point, km_start, km_end, km_total, amount_before_tax, fuel_consumed, notes, status, customer_id, toll_fee)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
     `).run(actualDriverId, vehicle_id, trip_date, departure_point, destination_point,
-           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null);
+           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null,
+           customer_id || null, parseFloat(toll_fee) || 0);
 
     // Lấy bản ghi vừa tạo kèm thông tin liên kết
     const newSchedule = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km,
+             c.short_name as customer_short_name, c.company_name as customer_company_name
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
       WHERE s.id = ?
     `).get(result.lastInsertRowid);
 
@@ -185,7 +241,9 @@ router.put('/:id', (req, res) => {
       destination_point,
       km_start,
       km_end,
-      notes
+      notes,
+      customer_id,
+      toll_fee
     } = req.body;
 
     // Kiểm tra km_end >= km_start
@@ -207,16 +265,22 @@ router.put('/:id', (req, res) => {
     db.prepare(`
       UPDATE schedules SET
         vehicle_id = ?, trip_date = ?, departure_point = ?, destination_point = ?,
-        km_start = ?, km_end = ?, km_total = ?, amount_before_tax = ?, fuel_consumed = ?, notes = ?
+        km_start = ?, km_end = ?, km_total = ?, amount_before_tax = ?, fuel_consumed = ?, notes = ?,
+        customer_id = ?, toll_fee = ?
       WHERE id = ?
     `).run(actualVehicleId, trip_date, departure_point, destination_point,
-           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null, id);
+           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null,
+           customer_id !== undefined ? (customer_id || null) : schedule.customer_id,
+           toll_fee !== undefined ? (parseFloat(toll_fee) || 0) : (schedule.toll_fee || 0),
+           id);
 
     const updated = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km,
+             c.short_name as customer_short_name, c.company_name as customer_company_name
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
       WHERE s.id = ?
     `).get(id);
 
@@ -269,10 +333,12 @@ router.patch('/:id/status', requireRole('admin', 'fleet_manager', 'accountant'),
     db.prepare('UPDATE schedules SET status = ? WHERE id = ?').run(status, id);
 
     const updated = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km,
+             c.short_name as customer_short_name, c.company_name as customer_company_name
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
       WHERE s.id = ?
     `).get(id);
 

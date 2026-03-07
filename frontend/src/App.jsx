@@ -11,6 +11,7 @@ import ScheduleForm from './components/ScheduleForm';
 import VehicleManager from './components/VehicleManager';
 import UserManager from './components/UserManager';
 import CustomerManager from './components/CustomerManager';
+import CustomerStats from './components/CustomerStats';
 import ReportPage from './components/ReportPage';
 
 /**
@@ -117,6 +118,18 @@ function App() {
               <PrivateRoute allowedRoles={['admin', 'fleet_manager']}>
                 <ProtectedLayout>
                   <CustomerManager />
+                </ProtectedLayout>
+              </PrivateRoute>
+            }
+          />
+
+          {/* Thống kê theo khách hàng - admin, accountant, fleet_manager */}
+          <Route
+            path="/customers/stats"
+            element={
+              <PrivateRoute allowedRoles={['admin', 'accountant', 'fleet_manager']}>
+                <ProtectedLayout>
+                  <CustomerStats />
                 </ProtectedLayout>
               </PrivateRoute>
             }
