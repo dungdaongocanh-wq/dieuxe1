@@ -22,6 +22,20 @@ db.pragma('foreign_keys = ON');
 
 // Tạo các bảng nếu chưa tồn tại
 function initializeDatabase() {
+  // Bảng khách hàng (phải tạo TRƯỚC bảng users vì users có FK → customers)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      short_name TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      address TEXT,
+      tax_code TEXT UNIQUE,
+      email TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Bảng người dùng
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -29,11 +43,44 @@ function initializeDatabase() {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       full_name TEXT NOT NULL,
+      date_of_birth DATE,
+      id_card_number TEXT,
+      id_card_issued_by TEXT,
+      id_card_issued_date DATE,
+      user_type TEXT NOT NULL DEFAULT 'driver' CHECK(user_type IN ('driver', 'customer', 'manager')),
+      customer_id INTEGER,
+      position TEXT,
       role TEXT NOT NULL CHECK(role IN ('admin', 'accountant', 'fleet_manager', 'driver')),
       is_active INTEGER DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
     )
   `);
+
+  // Migration: thêm các cột mới vào bảng users nếu chưa có (cho database đã tồn tại)
+  const userColumns = db.pragma('table_info(users)').map(c => c.name);
+  if (!userColumns.includes('date_of_birth')) {
+    db.exec('ALTER TABLE users ADD COLUMN date_of_birth DATE');
+  }
+  if (!userColumns.includes('id_card_number')) {
+    db.exec('ALTER TABLE users ADD COLUMN id_card_number TEXT');
+  }
+  if (!userColumns.includes('id_card_issued_by')) {
+    db.exec('ALTER TABLE users ADD COLUMN id_card_issued_by TEXT');
+  }
+  if (!userColumns.includes('id_card_issued_date')) {
+    db.exec('ALTER TABLE users ADD COLUMN id_card_issued_date DATE');
+  }
+  if (!userColumns.includes('user_type')) {
+    // Thêm cột không có NOT NULL để tương thích với mọi phiên bản SQLite
+    db.exec("ALTER TABLE users ADD COLUMN user_type TEXT DEFAULT 'driver'");
+  }
+  if (!userColumns.includes('customer_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN customer_id INTEGER');
+  }
+  if (!userColumns.includes('position')) {
+    db.exec('ALTER TABLE users ADD COLUMN position TEXT');
+  }
 
   // Bảng phương tiện
   db.exec(`
@@ -73,6 +120,18 @@ function initializeDatabase() {
 
 // Thêm dữ liệu mẫu ban đầu
 function seedData() {
+  // Thêm khách hàng mẫu nếu chưa có
+  const customerCount = db.prepare('SELECT COUNT(*) as count FROM customers').get();
+  if (customerCount.count === 0) {
+    const insertCustomer = db.prepare(
+      'INSERT INTO customers (short_name, company_name, address, tax_code, email) VALUES (?, ?, ?, ?, ?)'
+    );
+    insertCustomer.run('HANSOL', 'Công ty TNHH Hansol Vina', 'Khu công nghiệp Tiên Sơn, Bắc Ninh', '0301234567', 'contact@hansol.vn');
+    insertCustomer.run('ILS-TECH', 'Công ty CP ILS Technology', 'Khu công nghiệp Hạp Lĩnh, Bắc Ninh', '0307654321', '');
+    insertCustomer.run('SEVT', 'Samsung Electronics Việt Nam Thái Nguyên', 'KCN Samsung, Thái Nguyên', '0200123456', 'sevt@samsung.com');
+    console.log('✅ Đã thêm dữ liệu khách hàng mẫu');
+  }
+
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
 
   if (userCount.count === 0) {
@@ -84,14 +143,14 @@ function seedData() {
 
     // Thêm người dùng mẫu
     const insertUser = db.prepare(
-      'INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)'
+      'INSERT INTO users (username, password, full_name, role, user_type, position) VALUES (?, ?, ?, ?, ?, ?)'
     );
 
-    insertUser.run('admin', adminPass, 'Quản Trị Viên', 'admin');
-    insertUser.run('ketoan1', ketoanPass, 'Nguyễn Kế Toán', 'accountant');
-    insertUser.run('quanly1', quanlyPass, 'Trần Quản Lý', 'fleet_manager');
-    insertUser.run('laixe1', laixePass, 'Lê Văn Lái', 'driver');
-    insertUser.run('laixe2', laixePass, 'Phạm Thị Xe', 'driver');
+    insertUser.run('admin', adminPass, 'Quản Trị Viên', 'admin', 'manager', 'Giám đốc');
+    insertUser.run('ketoan1', ketoanPass, 'Nguyễn Kế Toán', 'accountant', 'manager', 'Kế Toán Trưởng');
+    insertUser.run('quanly1', quanlyPass, 'Trần Quản Lý', 'fleet_manager', 'manager', 'Trưởng Phòng');
+    insertUser.run('laixe1', laixePass, 'Lê Văn Lái', 'driver', 'driver', null);
+    insertUser.run('laixe2', laixePass, 'Phạm Thị Xe', 'driver', 'driver', null);
 
     console.log('✅ Đã thêm dữ liệu người dùng mẫu');
   }
