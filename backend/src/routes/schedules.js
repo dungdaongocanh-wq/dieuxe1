@@ -9,6 +9,30 @@ const { requireRole } = require('../middleware/roleCheck');
 router.use(authenticateToken);
 
 /**
+ * Tính tiền chuyến đi dựa trên km và cấu hình giá
+ * @param {number} kmTotal - Tổng số km
+ * @param {object} vehicle - Thông tin xe { price_per_km, fuel_rate }
+ * @param {object|null} pricing - Cấu hình giá { combo_km_threshold, combo_price, price_per_km_after } hoặc null
+ * @returns {number} Số tiền trước thuế
+ */
+function calcAmount(kmTotal, vehicle, pricing) {
+  const km = parseFloat(kmTotal) || 0;
+  if (!pricing || !pricing.combo_km_threshold || pricing.combo_km_threshold === 0) {
+    // Không có combo → tính theo đơn giá xe
+    return km * (vehicle.price_per_km || 10000);
+  }
+  const threshold = parseFloat(pricing.combo_km_threshold);
+  const comboPrice = parseFloat(pricing.combo_price) || 0;
+  const afterPrice = parseFloat(pricing.price_per_km_after) || 0;
+  if (km <= threshold) {
+    // Gói tối thiểu cố định
+    return threshold * comboPrice;
+  }
+  // Vượt ngưỡng combo
+  return (threshold * comboPrice) + ((km - threshold) * afterPrice);
+}
+
+/**
  * GET /api/schedules/stats/by-customer
  * Thống kê tổng hợp theo khách hàng
  * Nhận query params: month (YYYY-MM), vehicle_id, driver_id
@@ -210,13 +234,18 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
     // Tính tổng km
     const km_total = parseFloat(km_end) - parseFloat(km_start);
 
-    // Lấy định mức xăng và đơn giá từ xe
-    const vehicle = db.prepare('SELECT fuel_rate, price_per_km FROM vehicles WHERE id = ?').get(vehicle_id);
-    const fuelRate = vehicle ? (vehicle.fuel_rate || 8.5) : 8.5;
-    const pricePerKm = vehicle ? (vehicle.price_per_km || 10000) : 10000;
-
-    // Tính thành tiền và xăng tiêu thụ
-    const amount_before_tax = km_total * pricePerKm;
+    // Lấy thông tin xe
+    const vehicleData = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicle_id);
+    // Lấy pricing config nếu có customer_id
+    let pricing = null;
+    if (customer_id) {
+      pricing = db.prepare(
+        'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
+      ).get(customer_id, vehicle_id);
+    }
+    // Tính thành tiền theo công thức đúng
+    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing);
+    const fuelRate = vehicleData ? (vehicleData.fuel_rate || 8.5) : 8.5;
     const fuel_consumed = km_total * fuelRate / 100;
 
     const result = db.prepare(`
@@ -241,6 +270,40 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
     res.status(201).json(newSchedule);
   } catch (err) {
     console.error('Lỗi khi tạo lịch trình:', err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+});
+
+/**
+ * GET /api/schedules/pricing-preview
+ * Preview giá chuyến dựa trên xe, khách hàng, và số km
+ * Query params: vehicle_id, customer_id (optional), km_total
+ */
+router.get('/pricing-preview', (req, res) => {
+  try {
+    const { vehicle_id, customer_id, km_total } = req.query;
+    if (!vehicle_id || !km_total) {
+      return res.status(400).json({ message: 'Thiếu vehicle_id hoặc km_total' });
+    }
+    const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicle_id);
+    if (!vehicle) {
+      return res.status(404).json({ message: 'Không tìm thấy xe' });
+    }
+    let pricing = null;
+    if (customer_id) {
+      pricing = db.prepare(
+        'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
+      ).get(customer_id, vehicle_id);
+    }
+    const amount = calcAmount(parseFloat(km_total), vehicle, pricing);
+    const pricingType = (pricing && pricing.combo_km_threshold > 0) ? 'combo' : 'per_km';
+    res.json({
+      amount_before_tax: parseFloat(amount.toFixed(0)),
+      pricing_type: pricingType,
+      pricing_detail: pricing || { price_per_km: vehicle.price_per_km }
+    });
+  } catch (err) {
+    console.error('Lỗi khi preview giá:', err);
     res.status(500).json({ message: 'Lỗi server' });
   }
 });
@@ -288,13 +351,19 @@ router.put('/:id', (req, res) => {
 
     const km_total = parseFloat(km_end) - parseFloat(km_start);
 
-    // Lấy định mức xăng và đơn giá từ xe
+    // Lấy thông tin xe và pricing config
     const actualVehicleId = vehicle_id || schedule.vehicle_id;
-    const vehicle = db.prepare('SELECT fuel_rate, price_per_km FROM vehicles WHERE id = ?').get(actualVehicleId);
-    const fuelRate = vehicle ? (vehicle.fuel_rate || 8.5) : 8.5;
-    const pricePerKm = vehicle ? (vehicle.price_per_km || 10000) : 10000;
-
-    const amount_before_tax = km_total * pricePerKm;
+    const vehicleData = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(actualVehicleId);
+    const actualCustomerId = customer_id !== undefined ? (customer_id || null) : schedule.customer_id;
+    let pricing = null;
+    if (actualCustomerId) {
+      pricing = db.prepare(
+        'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
+      ).get(actualCustomerId, actualVehicleId);
+    }
+    // Tính thành tiền theo công thức đúng
+    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing);
+    const fuelRate = vehicleData ? (vehicleData.fuel_rate || 8.5) : 8.5;
     const fuel_consumed = km_total * fuelRate / 100;
 
     db.prepare(`
@@ -305,7 +374,7 @@ router.put('/:id', (req, res) => {
       WHERE id = ?
     `).run(actualVehicleId, trip_date, departure_point, destination_point,
            parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null,
-           customer_id !== undefined ? (customer_id || null) : schedule.customer_id,
+           actualCustomerId,
            toll_fee !== undefined ? (parseFloat(toll_fee) || 0) : (schedule.toll_fee || 0),
            id);
 
