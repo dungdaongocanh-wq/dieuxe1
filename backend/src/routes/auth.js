@@ -37,7 +37,8 @@ router.post('/login', (req, res) => {
       id: user.id,
       username: user.username,
       full_name: user.full_name,
-      role: user.role
+      role: user.role,
+      customer_id: user.customer_id || null
     },
     process.env.JWT_SECRET,
     { expiresIn: '24h' }
@@ -49,7 +50,8 @@ router.post('/login', (req, res) => {
       id: user.id,
       username: user.username,
       full_name: user.full_name,
-      role: user.role
+      role: user.role,
+      customer_id: user.customer_id || null
     }
   });
 });

@@ -29,6 +29,63 @@ const fmtDate = (dateStr) => {
   return d.toLocaleDateString('vi-VN');
 };
 
+// Format ngày giờ DD/MM/YYYY HH:mm
+const fmtDateTime = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+/**
+ * Modal nhập lý do từ chối
+ */
+function RejectModal({ onConfirm, onCancel }) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+
+  const handleConfirm = () => {
+    if (!reason.trim()) {
+      setError('Vui lòng nhập lý do từ chối');
+      return;
+    }
+    onConfirm(reason.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+        <h3 className="text-lg font-semibold text-gray-800 mb-3">❌ Lý do từ chối</h3>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm mb-3">
+            ⚠️ {error}
+          </div>
+        )}
+        <textarea
+          value={reason}
+          onChange={e => { setReason(e.target.value); setError(''); }}
+          placeholder="Nhập lý do từ chối..."
+          rows={4}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none resize-none"
+        />
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={handleConfirm}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-medium transition-colors"
+          >
+            Xác nhận từ chối
+          </button>
+          <button
+            onClick={onCancel}
+            className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 py-2 rounded-lg font-medium transition-colors"
+          >
+            Huỷ
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleTable() {
   const { getAuthHeaders, user } = useAuth();
   const [schedules, setSchedules] = useState([]);
@@ -37,6 +94,7 @@ function ScheduleTable() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null); // id of schedule to reject
 
   // Bộ lọc
   const [filters, setFilters] = useState({
@@ -57,6 +115,7 @@ function ScheduleTable() {
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
       if (filters.status) params.append('status', filters.status);
+      // customer: backend tự lọc theo customer_id, không cần thêm param
 
       const res = await fetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
       if (res.ok) setSchedules(await res.json());
@@ -107,6 +166,10 @@ function ScheduleTable() {
       if (res.ok) {
         setSchedules(prev => prev.filter(s => s.id !== id));
         setConfirmDelete(null);
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Không thể xóa lịch trình');
+        setConfirmDelete(null);
       }
     } catch (err) {
       console.error('Lỗi khi xóa:', err);
@@ -114,29 +177,49 @@ function ScheduleTable() {
   };
 
   /**
-   * Thay đổi trạng thái lịch trình (duyệt/từ chối)
+   * Duyệt lịch trình
    */
-  const handleStatusChange = async (id, status) => {
+  const handleApprove = async (id) => {
     try {
       const res = await fetch(`/api/schedules/${id}/status`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ status: 'approved' })
       });
       if (res.ok) {
         const updated = await res.json();
         setSchedules(prev => prev.map(s => s.id === id ? updated : s));
       }
     } catch (err) {
-      console.error('Lỗi khi cập nhật trạng thái:', err);
+      console.error('Lỗi khi duyệt:', err);
     }
+  };
+
+  /**
+   * Từ chối lịch trình với lý do
+   */
+  const handleReject = async (id, rejection_reason) => {
+    try {
+      const res = await fetch(`/api/schedules/${id}/status`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status: 'rejected', rejection_reason })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSchedules(prev => prev.map(s => s.id === id ? updated : s));
+      }
+    } catch (err) {
+      console.error('Lỗi khi từ chối:', err);
+    }
+    setRejectTarget(null);
   };
 
   /**
    * Xuất CSV
    */
   const handleExportCSV = () => {
-    const headers = ['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến', 'Số KM Đi', 'Số KM Kết Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)', 'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ (lít)', 'Trạng Thái'];
+    const headers = ['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến', 'Số KM Đi', 'Số KM Kết Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)', 'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ (lít)', 'Trạng Thái', 'Người Duyệt', 'Ngày Duyệt'];
     const rows = schedules.map((s, i) => [
       i + 1,
       s.driver_name,
@@ -150,7 +233,9 @@ function ScheduleTable() {
       s.license_plate,
       s.notes || '',
       s.fuel_consumed != null ? s.fuel_consumed.toFixed(2) : '',
-      statusConfig[s.status]?.label || s.status
+      statusConfig[s.status]?.label || s.status,
+      s.approved_by || '',
+      s.approved_at ? fmtDateTime(s.approved_at) : ''
     ]);
 
     const csvContent = [headers, ...rows]
@@ -181,8 +266,17 @@ function ScheduleTable() {
     setFilters({ month: getCurrentMonth(), driver_id: '', vehicle_id: '', status: '' });
   };
 
-  const canApprove = ['admin', 'fleet_manager', 'accountant'].includes(user?.role);
-  const canDelete = ['admin', 'fleet_manager'].includes(user?.role);
+  // Kiểm tra quyền duyệt
+  const canApprove = ['admin', 'fleet_manager', 'accountant', 'customer'].includes(user?.role);
+
+  // Kiểm tra quyền xóa cho từng lịch trình
+  const canDeleteSchedule = (schedule) => {
+    if (user?.role === 'admin') return true;
+    if (schedule.status === 'approved') return false;
+    if (user?.role === 'fleet_manager') return true;
+    if (user?.role === 'driver' && schedule.driver_id === user?.id && schedule.status === 'pending') return true;
+    return false;
+  };
 
   // Tổng hợp
   const totalKm = schedules.reduce((sum, s) => sum + (s.km_total || 0), 0);
@@ -318,12 +412,13 @@ function ScheduleTable() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px]">
+              <table className="w-full min-w-[1200px]">
                 <thead className="bg-blue-700 text-white">
                   <tr>
                     {['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến',
                       'Số KM Đi', 'Số KM K.Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế',
-                      'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ', 'Trạng Thái', 'Thao Tác'
+                      'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ', 'Trạng Thái', 'Thao Tác',
+                      'Người Duyệt', 'Ngày Duyệt'
                     ].map(h => (
                       <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase whitespace-nowrap">
                         {h}
@@ -378,11 +473,16 @@ function ScheduleTable() {
                         <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border ${statusConfig[schedule.status]?.class}`}>
                           {statusConfig[schedule.status]?.label}
                         </span>
+                        {schedule.status === 'rejected' && schedule.rejection_reason && (
+                          <p className="text-xs text-red-500 mt-0.5 max-w-[100px] truncate" title={schedule.rejection_reason}>
+                            {schedule.rejection_reason}
+                          </p>
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
-                          {/* Nút sửa - driver chỉ sửa được lịch pending của mình */}
-                          {(user?.role !== 'driver' ||
+                          {/* Nút sửa - driver chỉ sửa được lịch pending của mình, customer không sửa */}
+                          {user?.role !== 'customer' && (user?.role !== 'driver' ||
                             (schedule.driver_id === user?.id && schedule.status === 'pending')) && (
                             <Link
                               to={`/schedules/edit/${schedule.id}`}
@@ -393,18 +493,18 @@ function ScheduleTable() {
                             </Link>
                           )}
 
-                          {/* Nút duyệt */}
+                          {/* Nút duyệt/từ chối */}
                           {canApprove && schedule.status === 'pending' && (
                             <>
                               <button
-                                onClick={() => handleStatusChange(schedule.id, 'approved')}
+                                onClick={() => handleApprove(schedule.id)}
                                 className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors text-xs"
                                 title="Duyệt"
                               >
                                 ✅
                               </button>
                               <button
-                                onClick={() => handleStatusChange(schedule.id, 'rejected')}
+                                onClick={() => setRejectTarget(schedule.id)}
                                 className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors text-xs"
                                 title="Từ chối"
                               >
@@ -414,7 +514,7 @@ function ScheduleTable() {
                           )}
 
                           {/* Nút xóa */}
-                          {canDelete && (
+                          {canDeleteSchedule(schedule) && (
                             <button
                               onClick={() => setConfirmDelete(schedule.id)}
                               className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors text-xs"
@@ -424,6 +524,12 @@ function ScheduleTable() {
                             </button>
                           )}
                         </div>
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {schedule.approved_by || '—'}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {schedule.approved_at ? fmtDateTime(schedule.approved_at) : '—'}
                       </td>
                     </tr>
                   ))}
@@ -473,6 +579,14 @@ function ScheduleTable() {
         )}
       </div>
 
+      {/* Modal từ chối */}
+      {rejectTarget && (
+        <RejectModal
+          onConfirm={(reason) => handleReject(rejectTarget, reason)}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
+
       {/* Hộp thoại xác nhận xóa */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -504,3 +618,4 @@ function ScheduleTable() {
 }
 
 export default ScheduleTable;
+

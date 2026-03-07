@@ -73,7 +73,10 @@ router.get('/', (req, res) => {
              v.fuel_rate,
              v.price_per_km,
              c.short_name as customer_short_name,
-             c.company_name as customer_company_name
+             c.company_name as customer_company_name,
+             s.approved_by,
+             s.approved_at,
+             s.rejection_reason
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
@@ -87,6 +90,20 @@ router.get('/', (req, res) => {
     if (req.user.role === 'driver') {
       conditions.push('s.driver_id = ?');
       params.push(req.user.id);
+    }
+
+    // Customer chỉ xem lịch trình của công ty mình
+    if (req.user.role === 'customer') {
+      const userInfo = db.prepare('SELECT customer_id FROM users WHERE id = ?').get(req.user.id);
+      if (userInfo?.customer_id) {
+        conditions.push('s.customer_id = ?');
+        params.push(userInfo.customer_id);
+      } else {
+        return res.json([]);
+      }
+    } else if (req.query.customer_id) {
+      conditions.push('s.customer_id = ?');
+      params.push(req.query.customer_id);
     }
 
     // Lọc theo ngày
@@ -293,7 +310,7 @@ router.put('/:id', (req, res) => {
 
 /**
  * DELETE /api/schedules/:id
- * Xóa lịch trình (chỉ admin và fleet_manager)
+ * Xóa lịch trình (admin và fleet_manager, nhưng chỉ admin xóa được chuyến đã duyệt)
  */
 router.delete('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
   try {
@@ -302,6 +319,11 @@ router.delete('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
 
     if (!schedule) {
       return res.status(404).json({ message: 'Không tìm thấy lịch trình' });
+    }
+
+    // Chỉ admin được xóa chuyến đã duyệt
+    if (schedule.status === 'approved' && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Chỉ admin mới có thể xóa chuyến đã được duyệt' });
     }
 
     db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
@@ -314,23 +336,43 @@ router.delete('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
 
 /**
  * PATCH /api/schedules/:id/status
- * Duyệt hoặc từ chối lịch trình (fleet_manager, admin, accountant)
+ * Duyệt hoặc từ chối lịch trình
+ * Cho phép: admin, fleet_manager, accountant, customer
  */
-router.patch('/:id/status', requireRole('admin', 'fleet_manager', 'accountant'), (req, res) => {
+router.patch('/:id/status', authenticateToken, (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, rejection_reason } = req.body;
+    const allowedRoles = ['admin', 'fleet_manager', 'accountant', 'customer'];
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Không có quyền' });
+    }
 
     if (!['approved', 'rejected', 'pending'].includes(status)) {
       return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
     }
 
-    const schedule = db.prepare('SELECT * FROM schedules WHERE id = ?').get(id);
-    if (!schedule) {
-      return res.status(404).json({ message: 'Không tìm thấy lịch trình' });
+    if (status === 'rejected' && !rejection_reason?.trim()) {
+      return res.status(400).json({ message: 'Vui lòng nhập lý do từ chối' });
     }
 
-    db.prepare('UPDATE schedules SET status = ? WHERE id = ?').run(status, id);
+    const schedule = db.prepare('SELECT * FROM schedules WHERE id = ?').get(id);
+    if (!schedule) return res.status(404).json({ message: 'Không tìm thấy lịch trình' });
+
+    // Nếu là customer, kiểm tra chỉ được duyệt chuyến của công ty mình
+    if (req.user.role === 'customer') {
+      const userInfo = db.prepare('SELECT customer_id FROM users WHERE id = ?').get(req.user.id);
+      if (!userInfo?.customer_id || schedule.customer_id !== userInfo.customer_id) {
+        return res.status(403).json({ message: 'Không có quyền duyệt chuyến này' });
+      }
+    }
+
+    const approvedBy = (status === 'approved' || status === 'rejected') ? req.user.full_name : null;
+    const approvedAt = (status === 'approved' || status === 'rejected') ? new Date().toISOString() : null;
+    const reason = status === 'rejected' ? rejection_reason.trim() : null;
+
+    db.prepare('UPDATE schedules SET status = ?, approved_by = ?, approved_at = ?, rejection_reason = ? WHERE id = ?')
+      .run(status, approvedBy, approvedAt, reason, id);
 
     const updated = db.prepare(`
       SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km,
@@ -341,10 +383,9 @@ router.patch('/:id/status', requireRole('admin', 'fleet_manager', 'accountant'),
       LEFT JOIN customers c ON s.customer_id = c.id
       WHERE s.id = ?
     `).get(id);
-
     res.json(updated);
   } catch (err) {
-    console.error('Lỗi khi cập nhật trạng thái lịch trình:', err);
+    console.error('Lỗi khi cập nhật trạng thái:', err);
     res.status(500).json({ message: 'Lỗi server' });
   }
 });

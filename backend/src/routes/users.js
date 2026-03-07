@@ -49,19 +49,23 @@ router.post('/', requireRole('admin'), (req, res) => {
     } = req.body;
 
     // Kiểm tra dữ liệu bắt buộc
-    if (!username || !password || !full_name || !role) {
+    // Khi user_type = 'customer', role được tự động gán, nên không bắt buộc
+    const resolvedUserType = user_type || 'driver';
+    if (!username || !password || !full_name || (!role && resolvedUserType !== 'customer')) {
       return res.status(400).json({ message: 'Vui lòng điền đầy đủ thông tin' });
     }
 
+    // Nếu user_type = 'customer', tự động gán role = 'customer'
+    const resolvedRole = resolvedUserType === 'customer' ? 'customer' : role;
+
     // Kiểm tra vai trò hợp lệ
-    const validRoles = ['admin', 'accountant', 'fleet_manager', 'driver'];
-    if (!validRoles.includes(role)) {
+    const validRoles = ['admin', 'accountant', 'fleet_manager', 'driver', 'customer'];
+    if (!validRoles.includes(resolvedRole)) {
       return res.status(400).json({ message: 'Vai trò không hợp lệ' });
     }
 
     // Kiểm tra loại người dùng hợp lệ
     const validUserTypes = ['driver', 'customer', 'manager'];
-    const resolvedUserType = user_type || 'driver';
     if (!validUserTypes.includes(resolvedUserType)) {
       return res.status(400).json({ message: 'Loại người dùng không hợp lệ' });
     }
@@ -90,7 +94,7 @@ router.post('/', requireRole('admin'), (req, res) => {
         user_type, customer_id, position
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      username, hashedPassword, full_name, role,
+      username, hashedPassword, full_name, resolvedRole,
       date_of_birth || null, id_card_number || null,
       id_card_issued_by || null, id_card_issued_date || null,
       resolvedUserType,
@@ -153,6 +157,9 @@ router.put('/:id', requireRole('admin'), (req, res) => {
     // Xác định loại người dùng
     const resolvedUserType = user_type || user.user_type || 'driver';
 
+    // Nếu user_type = 'customer', tự động gán role = 'customer'
+    const resolvedRole = resolvedUserType === 'customer' ? 'customer' : (role || user.role);
+
     // Kiểm tra customer_id hợp lệ nếu user_type = 'customer'
     if (resolvedUserType === 'customer' && customer_id) {
       const cust = db.prepare('SELECT id FROM customers WHERE id = ?').get(customer_id);
@@ -182,7 +189,7 @@ router.put('/:id', requireRole('admin'), (req, res) => {
       username || user.username,
       hashedPassword,
       full_name || user.full_name,
-      role || user.role,
+      resolvedRole,
       is_active !== undefined ? is_active : user.is_active,
       date_of_birth !== undefined ? (date_of_birth || null) : user.date_of_birth,
       id_card_number !== undefined ? (id_card_number || null) : user.id_card_number,
