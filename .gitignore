@@ -1,0 +1,29 @@
+# Tệp và thư mục bỏ qua khi commit
+
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files (chứa thông tin nhạy cảm)
+.env
+backend/.env
+
+# Database file
+data/
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
