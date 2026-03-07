@@ -52,10 +52,12 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tự động gán role = 'customer' khi user_type = 'customer'
+  // Tự động gán role = 'customer' khi user_type = 'customer', reset về 'driver' khi đổi sang loại khác
   useEffect(() => {
     if (formData.user_type === 'customer') {
       setFormData(f => ({ ...f, role: 'customer' }));
+    } else if (formData.role === 'customer') {
+      setFormData(f => ({ ...f, role: 'driver' }));
     }
   }, [formData.user_type]);
 
