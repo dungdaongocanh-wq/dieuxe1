@@ -41,6 +41,7 @@ app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/schedules', require('./routes/schedules'));
 app.use('/api/vehicles', require('./routes/vehicles'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/customers', require('./routes/customers'));
 
 // Route kiểm tra server
 app.get('/api/health', (req, res) => {

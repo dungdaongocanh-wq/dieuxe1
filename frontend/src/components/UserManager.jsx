@@ -10,17 +10,46 @@ const roleLabels = {
   driver: '🚗 Lái Xe'
 };
 
+// Nhãn hiển thị cho loại người dùng
+const userTypeLabels = {
+  driver: '🚗 Lái xe',
+  customer: '🏢 Khách hàng',
+  manager: '👔 Quản lý'
+};
+
 // Form thêm/sửa người dùng
 function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
   const [formData, setFormData] = useState({
     username: userToEdit?.username || '',
     password: '',
     full_name: userToEdit?.full_name || '',
+    date_of_birth: userToEdit?.date_of_birth || '',
+    id_card_number: userToEdit?.id_card_number || '',
+    id_card_issued_by: userToEdit?.id_card_issued_by || '',
+    id_card_issued_date: userToEdit?.id_card_issued_date || '',
+    user_type: userToEdit?.user_type || 'driver',
+    customer_id: userToEdit?.customer_id || '',
+    position: userToEdit?.position || '',
     role: userToEdit?.role || 'driver',
     is_active: userToEdit?.is_active !== undefined ? userToEdit.is_active : 1
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [customers, setCustomers] = useState([]);
+
+  // Tải danh sách khách hàng để hiển thị dropdown
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch('/api/customers', { headers: getAuthHeaders() });
+        if (res.ok) setCustomers(await res.json());
+      } catch {
+        // Bỏ qua lỗi tải khách hàng
+      }
+    };
+    fetchCustomers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,6 +71,15 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
       const payload = { ...formData };
       if (userToEdit && !formData.password) {
         delete payload.password;
+      }
+      // Làm sạch customer_id và position tùy theo loại user
+      if (formData.user_type !== 'customer') {
+        payload.customer_id = null;
+      } else {
+        payload.customer_id = formData.customer_id || null;
+      }
+      if (formData.user_type !== 'manager') {
+        payload.position = null;
       }
 
       const res = await fetch(url, {
@@ -65,8 +103,8 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-4">
+      <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           {userToEdit ? '✏️ Sửa Người Dùng' : '➕ Thêm Người Dùng'}
         </h3>
@@ -78,6 +116,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Tên đăng nhập và Mật khẩu */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -95,7 +134,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Mật khẩu {!userToEdit && <span className="text-red-500">*</span>}
-                {userToEdit && <span className="text-xs text-gray-400">(để trống = không đổi)</span>}
+                {userToEdit && <span className="text-xs text-gray-400 ml-1">(để trống = không đổi)</span>}
               </label>
               <input
                 type="password"
@@ -107,6 +146,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
             </div>
           </div>
 
+          {/* Họ và tên */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Họ và tên <span className="text-red-500">*</span>
@@ -121,9 +161,115 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
             />
           </div>
 
+          {/* Ngày sinh và Số CMT/CCCD */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày sinh</label>
+              <input
+                type="date"
+                value={formData.date_of_birth}
+                onChange={e => setFormData(f => ({ ...f, date_of_birth: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Số CMT/CCCD</label>
+              <input
+                type="text"
+                value={formData.id_card_number}
+                onChange={e => setFormData(f => ({ ...f, id_card_number: e.target.value }))}
+                placeholder="012345678901"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Nơi cấp và Ngày cấp */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nơi cấp</label>
+              <input
+                type="text"
+                value={formData.id_card_issued_by}
+                onChange={e => setFormData(f => ({ ...f, id_card_issued_by: e.target.value }))}
+                placeholder="Cục Cảnh sát QLHC về TTXH"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ngày cấp</label>
+              <input
+                type="date"
+                value={formData.id_card_issued_date}
+                onChange={e => setFormData(f => ({ ...f, id_card_issued_date: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Loại người dùng */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Loại người dùng</label>
+            <div className="flex gap-4">
+              {[
+                { value: 'driver', label: '🚗 Lái xe' },
+                { value: 'customer', label: '🏢 Khách hàng' },
+                { value: 'manager', label: '👔 Quản lý' }
+              ].map(opt => (
+                <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="user_type"
+                    value={opt.value}
+                    checked={formData.user_type === opt.value}
+                    onChange={e => setFormData(f => ({ ...f, user_type: e.target.value }))}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Dropdown chọn công ty nếu loại = 'customer' */}
+            {formData.user_type === 'customer' && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Công ty <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.customer_id}
+                  onChange={e => setFormData(f => ({ ...f, customer_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">-- Chọn công ty --</option>
+                  {customers.filter(c => c.is_active).map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.short_name} — {c.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Ô nhập chức vụ nếu loại = 'manager' */}
+            {formData.user_type === 'manager' && (
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Chức vụ</label>
+                <input
+                  type="text"
+                  value={formData.position}
+                  onChange={e => setFormData(f => ({ ...f, position: e.target.value }))}
+                  placeholder="VD: Giám đốc, Trưởng phòng..."
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Vai trò hệ thống */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Vai trò <span className="text-red-500">*</span>
+              Vai trò hệ thống <span className="text-red-500">*</span>
             </label>
             <select
               value={formData.role}
@@ -137,6 +283,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
             </select>
           </div>
 
+          {/* Trạng thái hoạt động */}
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -273,7 +420,7 @@ function UserManager() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['STT', 'Tên đăng nhập', 'Họ và Tên', 'Vai Trò', 'Trạng Thái', 'Ngày Tạo', 'Thao Tác'].map(h => (
+                  {['STT', 'Tên đăng nhập', 'Họ và Tên', 'Loại', 'Công ty / Chức vụ', 'Vai Trò', 'Trạng Thái', 'Ngày Tạo', 'Thao Tác'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">
                       {h}
                     </th>
@@ -291,6 +438,14 @@ function UserManager() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-800">{u.full_name}</td>
+                    <td className="px-4 py-3 text-sm">{userTypeLabels[u.user_type] || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {u.user_type === 'customer' && u.customer_short_name
+                        ? <span className="font-medium text-blue-700">{u.customer_short_name}</span>
+                        : u.user_type === 'manager' && u.position
+                          ? u.position
+                          : '—'}
+                    </td>
                     <td className="px-4 py-3 text-sm">{roleLabels[u.role]}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${

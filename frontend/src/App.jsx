@@ -10,6 +10,7 @@ import ScheduleTable from './components/ScheduleTable';
 import ScheduleForm from './components/ScheduleForm';
 import VehicleManager from './components/VehicleManager';
 import UserManager from './components/UserManager';
+import CustomerManager from './components/CustomerManager';
 
 /**
  * Layout chính cho các trang được bảo vệ (có Navbar)
@@ -103,6 +104,18 @@ function App() {
               <PrivateRoute allowedRoles={['admin']}>
                 <ProtectedLayout>
                   <UserManager />
+                </ProtectedLayout>
+              </PrivateRoute>
+            }
+          />
+
+          {/* Quản lý khách hàng - admin và fleet_manager */}
+          <Route
+            path="/customers"
+            element={
+              <PrivateRoute allowedRoles={['admin', 'fleet_manager']}>
+                <ProtectedLayout>
+                  <CustomerManager />
                 </ProtectedLayout>
               </PrivateRoute>
             }
