@@ -49,6 +49,7 @@ function Navbar() {
       { path: '/customers', label: '🏢 Khách Hàng', roles: ['admin', 'fleet_manager'] },
       { path: '/customers/stats', label: '📈 TK Khách Hàng', roles: ['admin', 'accountant', 'fleet_manager'] },
       { path: '/reports', label: '📈 Báo Cáo', roles: ['admin', 'accountant', 'fleet_manager'] },
+      { path: '/monthly-report', label: '📈 Báo Cáo Tháng', roles: ['admin', 'accountant', 'fleet_manager'] },
       { path: '/users', label: '👥 Người Dùng', roles: ['admin'] },
     ];
 

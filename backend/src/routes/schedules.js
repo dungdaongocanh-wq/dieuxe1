@@ -327,6 +327,76 @@ router.put('/:id', (req, res) => {
 });
 
 /**
+ * GET /api/schedules/export/monthly
+ * Xuất danh sách lịch trình theo tháng kèm tổng hợp
+ * Query params: month (YYYY-MM), vehicle_id, driver_id, customer_id
+ */
+router.get('/export/monthly', requireRole('admin', 'fleet_manager', 'accountant'), (req, res) => {
+  try {
+    const conditions = [];
+    const params = [];
+
+    // Lọc theo tháng
+    if (req.query.month) {
+      conditions.push("strftime('%Y-%m', s.trip_date) = ?");
+      params.push(req.query.month);
+    }
+
+    // Lọc theo phương tiện
+    if (req.query.vehicle_id) {
+      conditions.push('s.vehicle_id = ?');
+      params.push(req.query.vehicle_id);
+    }
+
+    // Lọc theo lái xe
+    if (req.query.driver_id) {
+      conditions.push('s.driver_id = ?');
+      params.push(req.query.driver_id);
+    }
+
+    // Lọc theo khách hàng
+    if (req.query.customer_id) {
+      conditions.push('s.customer_id = ?');
+      params.push(req.query.customer_id);
+    }
+
+    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const schedules = db.prepare(`
+      SELECT s.*,
+             u.full_name as driver_name,
+             u.username as driver_username,
+             v.license_plate,
+             v.vehicle_type,
+             v.fuel_rate,
+             v.price_per_km,
+             c.short_name as customer_short_name,
+             c.company_name as customer_company_name
+      FROM schedules s
+      JOIN users u ON s.driver_id = u.id
+      JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      ${where}
+      ORDER BY s.trip_date ASC, s.created_at ASC
+    `).all(...params);
+
+    // Tổng hợp
+    const summary = schedules.reduce((acc, s) => ({
+      total_trips: acc.total_trips + 1,
+      total_km: acc.total_km + (s.km_total || 0),
+      total_toll_fee: acc.total_toll_fee + (s.toll_fee || 0),
+      total_fuel_consumed: acc.total_fuel_consumed + (s.fuel_consumed || 0),
+      total_amount: acc.total_amount + (s.amount_before_tax || 0)
+    }), { total_trips: 0, total_km: 0, total_toll_fee: 0, total_fuel_consumed: 0, total_amount: 0 });
+
+    res.json({ schedules, summary });
+  } catch (err) {
+    console.error('Lỗi khi xuất báo cáo tháng:', err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+});
+
+/**
  * DELETE /api/schedules/:id
  * Xóa lịch trình (admin và fleet_manager, nhưng chỉ admin xóa được chuyến đã duyệt)
  */
