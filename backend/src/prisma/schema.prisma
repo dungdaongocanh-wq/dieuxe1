@@ -1,0 +1,74 @@
+// Prisma Schema cho Bảng Theo Dõi Tình Hình Sử Dụng Xe
+// CÔNG TY TNHH DNA EXPRESS VIỆT NAM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum vai trò người dùng (4 cấp độ)
+enum Role {
+  admin          // Quản lý cấp cao
+  accountant     // Kế toán
+  fleet_manager  // Quản lý lái xe
+  driver         // Lái xe
+}
+
+// Enum trạng thái lịch trình
+enum Status {
+  pending   // Chờ duyệt
+  approved  // Đã duyệt
+  rejected  // Từ chối
+}
+
+// Model tài khoản người dùng
+model User {
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  password  String
+  fullName  String
+  role      Role
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  schedules Schedule[]
+}
+
+// Model xe (Biển Kiểm Soát)
+model Vehicle {
+  id           Int        @id @default(autoincrement())
+  licensePlate String     @unique
+  vehicleType  String?
+  fuelRate     Float      @default(8.5)   // Định mức xăng (lít/100km)
+  pricePerKm   Float      @default(10000) // Đơn giá (VND/km)
+  notes        String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  schedules    Schedule[]
+}
+
+// Model lịch trình chuyến xe
+model Schedule {
+  id               Int      @id @default(autoincrement())
+  driverId         Int
+  driver           User     @relation(fields: [driverId], references: [id])
+  vehicleId        Int
+  vehicle          Vehicle  @relation(fields: [vehicleId], references: [id])
+  tripDate         DateTime // Ngày chuyến đi
+  departurePoint   String   // Điểm đi
+  destinationPoint String   // Điểm đến
+  kmStart          Float    // Số KM điểm đi (đồng hồ lúc bắt đầu)
+  kmEnd            Float    // Số KM kết thúc (đồng hồ lúc kết thúc)
+  kmTotal          Float    // Tổng số KM = kmEnd - kmStart
+  amountBeforeTax  Float    // Thành tiền trước thuế = kmTotal * pricePerKm
+  fuelConsumed     Float    // Xăng dầu tiêu thụ = kmTotal * fuelRate / 100
+  notes            String?  // Ghi chú
+  status           Status   @default(pending)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
