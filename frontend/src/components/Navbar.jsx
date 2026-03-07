@@ -28,7 +28,14 @@ function Navbar() {
   /**
    * Kiểm tra link có đang active không
    */
-  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path) => {
+    if (location.pathname === path) return true;
+    // Chỉ match prefix nếu không có nav item nào khác cụ thể hơn
+    const navItems = getNavItems();
+    const moreSpecific = navItems.some(item => item.path !== path && item.path.startsWith(path + '/'));
+    if (moreSpecific) return false;
+    return location.pathname.startsWith(path + '/');
+  };
 
   /**
    * Xác định các menu items dựa trên vai trò người dùng
@@ -39,6 +46,7 @@ function Navbar() {
       { path: '/schedules', label: '📋 Lịch Trình', roles: ['admin', 'accountant', 'fleet_manager', 'driver'] },
       { path: '/vehicles', label: '🚗 Phương Tiện', roles: ['admin', 'fleet_manager'] },
       { path: '/customers', label: '🏢 Khách Hàng', roles: ['admin', 'fleet_manager'] },
+      { path: '/customers/stats', label: '📈 TK Khách Hàng', roles: ['admin', 'accountant', 'fleet_manager'] },
       { path: '/reports', label: '📈 Báo Cáo', roles: ['admin', 'accountant', 'fleet_manager'] },
       { path: '/users', label: '👥 Người Dùng', roles: ['admin'] },
     ];
