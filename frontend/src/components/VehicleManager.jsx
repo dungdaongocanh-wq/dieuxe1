@@ -279,11 +279,13 @@ function VehicleManager() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{vehicle.vehicle_type || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-700">{vehicle.fuel_rate ?? 8.5} lít/100km</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {vehicle.fuel_rate != null ? vehicle.fuel_rate + ' lít/100km' : '—'}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {vehicle.price_per_km != null
                         ? new Intl.NumberFormat('vi-VN').format(vehicle.price_per_km) + ' VNĐ/km'
-                        : '10.000 VNĐ/km'}
+                        : '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{vehicle.notes || '—'}</td>
                     <td className="px-4 py-3">
