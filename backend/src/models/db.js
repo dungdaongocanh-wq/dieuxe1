@@ -89,10 +89,21 @@ function initializeDatabase() {
       license_plate TEXT UNIQUE NOT NULL,
       vehicle_type TEXT,
       notes TEXT,
+      fuel_rate REAL DEFAULT 8.5,
+      price_per_km REAL DEFAULT 10000,
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Migration: thêm cột fuel_rate và price_per_km vào vehicles nếu chưa có
+  const vehicleColumns = db.pragma('table_info(vehicles)').map(c => c.name);
+  if (!vehicleColumns.includes('fuel_rate')) {
+    db.exec('ALTER TABLE vehicles ADD COLUMN fuel_rate REAL DEFAULT 8.5');
+  }
+  if (!vehicleColumns.includes('price_per_km')) {
+    db.exec('ALTER TABLE vehicles ADD COLUMN price_per_km REAL DEFAULT 10000');
+  }
 
   // Bảng lịch trình
   db.exec(`
@@ -106,6 +117,8 @@ function initializeDatabase() {
       km_start REAL NOT NULL,
       km_end REAL NOT NULL,
       km_total REAL,
+      amount_before_tax REAL,
+      fuel_consumed REAL,
       notes TEXT,
       status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -113,6 +126,15 @@ function initializeDatabase() {
       FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
     )
   `);
+
+  // Migration: thêm cột amount_before_tax và fuel_consumed vào schedules nếu chưa có
+  const scheduleColumns = db.pragma('table_info(schedules)').map(c => c.name);
+  if (!scheduleColumns.includes('amount_before_tax')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN amount_before_tax REAL');
+  }
+  if (!scheduleColumns.includes('fuel_consumed')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN fuel_consumed REAL');
+  }
 
   // Kiểm tra và thêm dữ liệu mẫu nếu chưa có
   seedData();
@@ -139,7 +161,7 @@ function seedData() {
     const adminPass = bcrypt.hashSync('Admin@123', 10);
     const ketoanPass = bcrypt.hashSync('Ketoan@123', 10);
     const quanlyPass = bcrypt.hashSync('Quanly@123', 10);
-    const laixePass = bcrypt.hashSync('Laixe@123', 10);
+    const driverPass = bcrypt.hashSync('Driver@123', 10);
 
     // Thêm người dùng mẫu
     const insertUser = db.prepare(
@@ -147,10 +169,10 @@ function seedData() {
     );
 
     insertUser.run('admin', adminPass, 'Quản Trị Viên', 'admin', 'manager', 'Giám đốc');
-    insertUser.run('ketoan1', ketoanPass, 'Nguyễn Kế Toán', 'accountant', 'manager', 'Kế Toán Trưởng');
-    insertUser.run('quanly1', quanlyPass, 'Trần Quản Lý', 'fleet_manager', 'manager', 'Trưởng Phòng');
-    insertUser.run('laixe1', laixePass, 'Lê Văn Lái', 'driver', 'driver', null);
-    insertUser.run('laixe2', laixePass, 'Phạm Thị Xe', 'driver', 'driver', null);
+    insertUser.run('ketoan', ketoanPass, 'Nguyễn Kế Toán', 'accountant', 'manager', 'Kế Toán Trưởng');
+    insertUser.run('quanly', quanlyPass, 'Trần Quản Lý', 'fleet_manager', 'manager', 'Trưởng Phòng');
+    insertUser.run('nguyenvankham', driverPass, 'Nguyễn Văn Khám', 'driver', 'driver', null);
+    insertUser.run('tranthimai', driverPass, 'Trần Thị Mai', 'driver', 'driver', null);
 
     console.log('✅ Đã thêm dữ liệu người dùng mẫu');
   }
@@ -160,12 +182,11 @@ function seedData() {
   if (vehicleCount.count === 0) {
     // Thêm phương tiện mẫu
     const insertVehicle = db.prepare(
-      'INSERT INTO vehicles (license_plate, vehicle_type, notes) VALUES (?, ?, ?)'
+      'INSERT INTO vehicles (license_plate, vehicle_type, fuel_rate, price_per_km) VALUES (?, ?, ?, ?)'
     );
 
-    insertVehicle.run('51A-12345', 'Xe tải', 'Xe tải 5 tấn');
-    insertVehicle.run('51B-67890', 'Xe khách', 'Xe khách 16 chỗ');
-    insertVehicle.run('51C-11111', 'Xe con', 'Xe con 4 chỗ');
+    insertVehicle.run('99C-123.45', 'Xe tải', 8.5, 10000);
+    insertVehicle.run('99C-678.90', 'Xe khách', 9.0, 12000);
 
     console.log('✅ Đã thêm dữ liệu phương tiện mẫu');
   }

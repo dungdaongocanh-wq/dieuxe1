@@ -8,6 +8,8 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
     license_plate: vehicle?.license_plate || '',
     vehicle_type: vehicle?.vehicle_type || '',
     notes: vehicle?.notes || '',
+    fuel_rate: vehicle?.fuel_rate !== undefined ? vehicle.fuel_rate : 8.5,
+    price_per_km: vehicle?.price_per_km !== undefined ? vehicle.price_per_km : 10000,
     is_active: vehicle?.is_active !== undefined ? vehicle.is_active : 1
   });
   const [error, setError] = useState('');
@@ -65,7 +67,7 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
               value={formData.license_plate}
               onChange={e => setFormData(f => ({ ...f, license_plate: e.target.value }))}
               required
-              placeholder="VD: 51A-12345"
+              placeholder="VD: 99C-123.45"
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -79,6 +81,37 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
               placeholder="VD: Xe tải, Xe khách..."
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Định Mức Xăng (lít/100km)
+              </label>
+              <input
+                type="number"
+                value={formData.fuel_rate}
+                onChange={e => setFormData(f => ({ ...f, fuel_rate: e.target.value }))}
+                min="0"
+                step="0.1"
+                placeholder="8.5"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Đơn Giá (VNĐ/km)
+              </label>
+              <input
+                type="number"
+                value={formData.price_per_km}
+                onChange={e => setFormData(f => ({ ...f, price_per_km: e.target.value }))}
+                min="0"
+                step="100"
+                placeholder="10000"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
           </div>
 
           <div>
@@ -227,59 +260,69 @@ function VehicleManager() {
             <p>Chưa có phương tiện nào</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                {['STT', 'Biển Số Xe', 'Loại Xe', 'Ghi Chú', 'Trạng Thái', 'Ngày Thêm', 'Thao Tác'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {vehicles.map((vehicle, index) => (
-                <tr key={vehicle.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
-                  <td className="px-4 py-3">
-                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-mono text-sm font-semibold">
-                      {vehicle.license_plate}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{vehicle.vehicle_type || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{vehicle.notes || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                      vehicle.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {vehicle.is_active ? 'Hoạt động' : 'Ngừng hoạt động'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(vehicle.created_at).toLocaleDateString('vi-VN')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => { setEditingVehicle(vehicle); setShowModal(true); }}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors text-sm"
-                        title="Sửa"
-                      >
-                        ✏️
-                      </button>
-                      {isAdmin && (
-                        <button
-                          onClick={() => setConfirmDelete(vehicle.id)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors text-sm"
-                          title="Xóa"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  {['STT', 'Biển Số Xe', 'Loại Xe', 'Định Mức Xăng', 'Đơn Giá', 'Ghi Chú', 'Trạng Thái', 'Ngày Thêm', 'Thao Tác'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {vehicles.map((vehicle, index) => (
+                  <tr key={vehicle.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm text-gray-500">{index + 1}</td>
+                    <td className="px-4 py-3">
+                      <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-mono text-sm font-semibold">
+                        {vehicle.license_plate}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{vehicle.vehicle_type || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {vehicle.fuel_rate != null ? vehicle.fuel_rate + ' lít/100km' : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {vehicle.price_per_km != null
+                        ? new Intl.NumberFormat('vi-VN').format(vehicle.price_per_km) + ' VNĐ/km'
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{vehicle.notes || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                        vehicle.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {vehicle.is_active ? 'Hoạt động' : 'Ngừng hoạt động'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {new Date(vehicle.created_at).toLocaleDateString('vi-VN')}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditingVehicle(vehicle); setShowModal(true); }}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors text-sm"
+                          title="Sửa"
+                        >
+                          ✏️
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setConfirmDelete(vehicle.id)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors text-sm"
+                            title="Xóa"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

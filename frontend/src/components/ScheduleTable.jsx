@@ -13,6 +13,22 @@ const statusConfig = {
 // Số bản ghi mỗi trang
 const PAGE_SIZE = 10;
 
+// Lấy tháng hiện tại dạng YYYY-MM
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
+
+// Format tiền VND
+const fmtCurrency = (val) => {
+  if (val == null) return '—';
+  return new Intl.NumberFormat('vi-VN').format(val) + ' VNĐ';
+};
+
+// Format ngày DD/MM/YYYY
+const fmtDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('vi-VN');
+};
+
 function ScheduleTable() {
   const { getAuthHeaders, user } = useAuth();
   const [schedules, setSchedules] = useState([]);
@@ -24,7 +40,7 @@ function ScheduleTable() {
 
   // Bộ lọc
   const [filters, setFilters] = useState({
-    date: '',
+    month: getCurrentMonth(),
     driver_id: '',
     vehicle_id: '',
     status: ''
@@ -37,7 +53,7 @@ function ScheduleTable() {
   const fetchSchedules = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (filters.date) params.append('date', filters.date);
+      if (filters.month) params.append('month', filters.month);
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
       if (filters.status) params.append('status', filters.status);
@@ -116,6 +132,41 @@ function ScheduleTable() {
     }
   };
 
+  /**
+   * Xuất CSV
+   */
+  const handleExportCSV = () => {
+    const headers = ['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến', 'Số KM Đi', 'Số KM Kết Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)', 'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ (lít)', 'Trạng Thái'];
+    const rows = schedules.map((s, i) => [
+      i + 1,
+      s.driver_name,
+      fmtDate(s.trip_date),
+      s.departure_point,
+      s.destination_point,
+      s.km_start,
+      s.km_end,
+      s.km_total != null ? s.km_total.toFixed(1) : '',
+      s.amount_before_tax != null ? s.amount_before_tax.toFixed(0) : '',
+      s.license_plate,
+      s.notes || '',
+      s.fuel_consumed != null ? s.fuel_consumed.toFixed(2) : '',
+      statusConfig[s.status]?.label || s.status
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const bom = '\uFEFF'; // BOM for Excel UTF-8
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lich-trinh-${filters.month || 'all'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Phân trang
   const totalPages = Math.ceil(schedules.length / PAGE_SIZE);
   const paginatedSchedules = schedules.slice(
@@ -127,36 +178,54 @@ function ScheduleTable() {
    * Reset bộ lọc
    */
   const resetFilters = () => {
-    setFilters({ date: '', driver_id: '', vehicle_id: '', status: '' });
+    setFilters({ month: getCurrentMonth(), driver_id: '', vehicle_id: '', status: '' });
   };
 
-  const canApprove = ['admin', 'fleet_manager'].includes(user?.role);
+  const canApprove = ['admin', 'fleet_manager', 'accountant'].includes(user?.role);
   const canDelete = ['admin', 'fleet_manager'].includes(user?.role);
+
+  // Tổng hợp
+  const totalKm = schedules.reduce((sum, s) => sum + (s.km_total || 0), 0);
+  const totalAmount = schedules.reduce((sum, s) => sum + (s.amount_before_tax || 0), 0);
+  const totalFuel = schedules.reduce((sum, s) => sum + (s.fuel_consumed || 0), 0);
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-800">Danh Sách Lịch Trình</h1>
-        {['admin', 'fleet_manager', 'driver'].includes(user?.role) && (
-          <Link
-            to="/schedules/new"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            + Thêm Lịch Trình
-          </Link>
-        )}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">BẢNG THEO DÕI TÌNH HÌNH SỬ DỤNG XE</h1>
+          <p className="text-sm text-gray-500 mt-0.5">CÔNG TY TNHH DNA EXPRESS VIỆT NAM</p>
+        </div>
+        <div className="flex gap-2">
+          {['admin', 'fleet_manager', 'accountant'].includes(user?.role) && schedules.length > 0 && (
+            <button
+              onClick={handleExportCSV}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              📥 Xuất Excel (CSV)
+            </button>
+          )}
+          {['admin', 'fleet_manager', 'driver'].includes(user?.role) && (
+            <Link
+              to="/schedules/new"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              + Thêm Lịch Trình
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Bộ lọc */}
       <div className="bg-white rounded-xl shadow p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Ngày</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Tháng/Năm</label>
             <input
-              type="date"
-              value={filters.date}
-              onChange={e => setFilters(f => ({ ...f, date: e.target.value }))}
+              type="month"
+              value={filters.month}
+              onChange={e => setFilters(f => ({ ...f, month: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -178,7 +247,7 @@ function ScheduleTable() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Phương Tiện</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">BKS Xe</label>
             <select
               value={filters.vehicle_id}
               onChange={e => setFilters(f => ({ ...f, vehicle_id: e.target.value }))}
@@ -216,6 +285,24 @@ function ScheduleTable() {
         </div>
       </div>
 
+      {/* Tổng hợp */}
+      {schedules.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
+            <p className="text-xs text-blue-600 font-medium">Tổng KM</p>
+            <p className="text-lg font-bold text-blue-800">{totalKm.toFixed(1)} km</p>
+          </div>
+          <div className="bg-green-50 rounded-xl p-3 border border-green-100 text-center">
+            <p className="text-xs text-green-600 font-medium">Tổng Thành Tiền</p>
+            <p className="text-lg font-bold text-green-800">{new Intl.NumberFormat('vi-VN').format(totalAmount)} VNĐ</p>
+          </div>
+          <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 text-center">
+            <p className="text-xs text-orange-600 font-medium">Tổng Xăng</p>
+            <p className="text-lg font-bold text-orange-800">{totalFuel.toFixed(2)} lít</p>
+          </div>
+        </div>
+      )}
+
       {/* Bảng dữ liệu */}
       <div className="bg-white rounded-xl shadow overflow-hidden">
         {loading ? (
@@ -231,13 +318,14 @@ function ScheduleTable() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px]">
-                <thead className="bg-gray-50 border-b">
+              <table className="w-full min-w-[1100px]">
+                <thead className="bg-blue-700 text-white">
                   <tr>
-                    {['STT', 'Ngày', 'Người Lái', 'Biển Số Xe', 'Điểm Đi', 'Điểm Đến',
-                      'Km Bắt Đầu', 'Km Kết Thúc', 'Tổng Km', 'Ghi Chú', 'Trạng Thái', 'Thao Tác'
+                    {['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến',
+                      'Số KM Đi', 'Số KM K.Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế',
+                      'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ', 'Trạng Thái', 'Thao Tác'
                     ].map(h => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">
+                      <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase whitespace-nowrap">
                         {h}
                       </th>
                     ))}
@@ -246,44 +334,52 @@ function ScheduleTable() {
                 <tbody className="divide-y divide-gray-100">
                   {paginatedSchedules.map((schedule, index) => (
                     <tr key={schedule.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                      <td className="px-3 py-3 text-sm text-gray-500">
                         {(currentPage - 1) * PAGE_SIZE + index + 1}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        {new Date(schedule.trip_date).toLocaleDateString('vi-VN')}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
                         {schedule.driver_name}
                       </td>
-                      <td className="px-4 py-3 text-sm whitespace-nowrap">
+                      <td className="px-3 py-3 text-sm whitespace-nowrap">
+                        {fmtDate(schedule.trip_date)}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 max-w-[100px] truncate">
+                        {schedule.departure_point}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 max-w-[100px] truncate">
+                        {schedule.destination_point}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-right text-gray-600">
+                        {schedule.km_start?.toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-right text-gray-600">
+                        {schedule.km_end?.toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-right font-semibold text-blue-700">
+                        {schedule.km_total != null ? schedule.km_total.toFixed(1) : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-right font-semibold text-green-700 whitespace-nowrap">
+                        {schedule.amount_before_tax != null
+                          ? new Intl.NumberFormat('vi-VN').format(schedule.amount_before_tax) + ' VNĐ'
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-sm whitespace-nowrap">
                         <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono text-xs">
                           {schedule.license_plate}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px] truncate">
-                        {schedule.departure_point}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-[120px] truncate">
-                        {schedule.destination_point}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-600">
-                        {schedule.km_start?.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-600">
-                        {schedule.km_end?.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right font-semibold text-blue-700">
-                        {schedule.km_total?.toFixed(1)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 max-w-[100px] truncate">
+                      <td className="px-3 py-3 text-sm text-gray-500 max-w-[80px] truncate">
                         {schedule.notes || '—'}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3 text-sm text-right text-orange-700 whitespace-nowrap">
+                        {schedule.fuel_consumed != null ? schedule.fuel_consumed.toFixed(2) + ' lít' : '—'}
+                      </td>
+                      <td className="px-3 py-3">
                         <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border ${statusConfig[schedule.status]?.class}`}>
                           {statusConfig[schedule.status]?.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <div className="flex items-center gap-1">
                           {/* Nút sửa - driver chỉ sửa được lịch pending của mình */}
                           {(user?.role !== 'driver' ||

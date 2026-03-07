@@ -21,7 +21,9 @@ router.get('/', (req, res) => {
              u.full_name as driver_name, 
              u.username as driver_username,
              v.license_plate, 
-             v.vehicle_type
+             v.vehicle_type,
+             v.fuel_rate,
+             v.price_per_km
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
@@ -40,6 +42,18 @@ router.get('/', (req, res) => {
     if (req.query.date) {
       conditions.push('s.trip_date = ?');
       params.push(req.query.date);
+    }
+
+    // Lọc theo tháng (YYYY-MM)
+    if (req.query.month) {
+      conditions.push("strftime('%Y-%m', s.trip_date) = ?");
+      params.push(req.query.month);
+    }
+
+    // Lọc theo năm
+    if (req.query.year) {
+      conditions.push("strftime('%Y', s.trip_date) = ?");
+      params.push(req.query.year);
     }
 
     // Lọc theo lái xe (chỉ admin/fleet_manager/accountant)
@@ -108,16 +122,25 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
     // Tính tổng km
     const km_total = parseFloat(km_end) - parseFloat(km_start);
 
+    // Lấy định mức xăng và đơn giá từ xe
+    const vehicle = db.prepare('SELECT fuel_rate, price_per_km FROM vehicles WHERE id = ?').get(vehicle_id);
+    const fuelRate = vehicle ? (vehicle.fuel_rate || 8.5) : 8.5;
+    const pricePerKm = vehicle ? (vehicle.price_per_km || 10000) : 10000;
+
+    // Tính thành tiền và xăng tiêu thụ
+    const amount_before_tax = km_total * pricePerKm;
+    const fuel_consumed = km_total * fuelRate / 100;
+
     const result = db.prepare(`
       INSERT INTO schedules 
-        (driver_id, vehicle_id, trip_date, departure_point, destination_point, km_start, km_end, km_total, notes, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        (driver_id, vehicle_id, trip_date, departure_point, destination_point, km_start, km_end, km_total, amount_before_tax, fuel_consumed, notes, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(actualDriverId, vehicle_id, trip_date, departure_point, destination_point,
-           parseFloat(km_start), parseFloat(km_end), km_total, notes || null);
+           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null);
 
     // Lấy bản ghi vừa tạo kèm thông tin liên kết
     const newSchedule = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
@@ -172,16 +195,25 @@ router.put('/:id', (req, res) => {
 
     const km_total = parseFloat(km_end) - parseFloat(km_start);
 
+    // Lấy định mức xăng và đơn giá từ xe
+    const actualVehicleId = vehicle_id || schedule.vehicle_id;
+    const vehicle = db.prepare('SELECT fuel_rate, price_per_km FROM vehicles WHERE id = ?').get(actualVehicleId);
+    const fuelRate = vehicle ? (vehicle.fuel_rate || 8.5) : 8.5;
+    const pricePerKm = vehicle ? (vehicle.price_per_km || 10000) : 10000;
+
+    const amount_before_tax = km_total * pricePerKm;
+    const fuel_consumed = km_total * fuelRate / 100;
+
     db.prepare(`
       UPDATE schedules SET
         vehicle_id = ?, trip_date = ?, departure_point = ?, destination_point = ?,
-        km_start = ?, km_end = ?, km_total = ?, notes = ?
+        km_start = ?, km_end = ?, km_total = ?, amount_before_tax = ?, fuel_consumed = ?, notes = ?
       WHERE id = ?
-    `).run(vehicle_id, trip_date, departure_point, destination_point,
-           parseFloat(km_start), parseFloat(km_end), km_total, notes || null, id);
+    `).run(actualVehicleId, trip_date, departure_point, destination_point,
+           parseFloat(km_start), parseFloat(km_end), km_total, amount_before_tax, fuel_consumed, notes || null, id);
 
     const updated = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
@@ -218,9 +250,9 @@ router.delete('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
 
 /**
  * PATCH /api/schedules/:id/status
- * Duyệt hoặc từ chối lịch trình (fleet_manager, admin)
+ * Duyệt hoặc từ chối lịch trình (fleet_manager, admin, accountant)
  */
-router.patch('/:id/status', requireRole('admin', 'fleet_manager'), (req, res) => {
+router.patch('/:id/status', requireRole('admin', 'fleet_manager', 'accountant'), (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -237,7 +269,7 @@ router.patch('/:id/status', requireRole('admin', 'fleet_manager'), (req, res) =>
     db.prepare('UPDATE schedules SET status = ? WHERE id = ?').run(status, id);
 
     const updated = db.prepare(`
-      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.vehicle_type, v.fuel_rate, v.price_per_km
       FROM schedules s
       JOIN users u ON s.driver_id = u.id
       JOIN vehicles v ON s.vehicle_id = v.id
