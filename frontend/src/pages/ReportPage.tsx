@@ -17,7 +17,7 @@ import {
 import { FileExcelOutlined, SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import dayjs, { Dayjs } from 'dayjs';
-import * as XLSX from 'xlsx';
+import * as XLSX from '@e965/xlsx';
 
 const { Title, Text } = Typography;
 
