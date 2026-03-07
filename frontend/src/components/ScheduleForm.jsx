@@ -10,6 +10,7 @@ function ScheduleForm() {
 
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
@@ -24,6 +25,8 @@ function ScheduleForm() {
     km_start: '',
     km_end: '',
     km_total: '',
+    amount_before_tax: '',
+    fuel_consumed: '',
     notes: ''
   });
 
@@ -32,6 +35,25 @@ function ScheduleForm() {
   useEffect(() => {
     fetchInitialData();
   }, [id]);
+
+  /**
+   * Tính toán các trường tự động dựa trên km và xe
+   */
+  const calcAutoFields = (kmStart, kmEnd, vehicle) => {
+    const start = parseFloat(kmStart) || 0;
+    const end = parseFloat(kmEnd) || 0;
+    if (end >= start && end > 0) {
+      const total = end - start;
+      const fuelRate = vehicle?.fuel_rate || 8.5;
+      const pricePerKm = vehicle?.price_per_km || 10000;
+      return {
+        km_total: total.toFixed(1),
+        amount_before_tax: (total * pricePerKm).toFixed(0),
+        fuel_consumed: (total * fuelRate / 100).toFixed(2)
+      };
+    }
+    return { km_total: '', amount_before_tax: '', fuel_consumed: '' };
+  };
 
   /**
    * Tải dữ liệu ban đầu (phương tiện, lái xe, và dữ liệu chỉnh sửa nếu có)
@@ -53,7 +75,8 @@ function ScheduleForm() {
 
       const results = await Promise.all(promises);
       const vehiclesData = await results[0].json();
-      setVehicles(vehiclesData.filter(v => v.is_active));
+      const activeVehicles = vehiclesData.filter(v => v.is_active);
+      setVehicles(activeVehicles);
 
       if (['admin', 'fleet_manager'].includes(user?.role) && results[1]) {
         const usersData = await results[1].json();
@@ -64,6 +87,8 @@ function ScheduleForm() {
         const schedulesData = await results[results.length - 1].json();
         const schedule = schedulesData.find(s => s.id === parseInt(id));
         if (schedule) {
+          const veh = activeVehicles.find(v => v.id === schedule.vehicle_id);
+          setSelectedVehicle(veh || null);
           setFormData({
             driver_id: schedule.driver_id,
             vehicle_id: schedule.vehicle_id,
@@ -72,7 +97,9 @@ function ScheduleForm() {
             destination_point: schedule.destination_point,
             km_start: schedule.km_start,
             km_end: schedule.km_end,
-            km_total: schedule.km_total,
+            km_total: schedule.km_total != null ? schedule.km_total.toFixed(1) : '',
+            amount_before_tax: schedule.amount_before_tax != null ? schedule.amount_before_tax.toFixed(0) : '',
+            fuel_consumed: schedule.fuel_consumed != null ? schedule.fuel_consumed.toFixed(2) : '',
             notes: schedule.notes || ''
           });
         }
@@ -92,11 +119,18 @@ function ScheduleForm() {
     const { name, value } = e.target;
     const newData = { ...formData, [name]: value };
 
-    // Tự động tính tổng Km khi km_start hoặc km_end thay đổi
+    // Khi chọn xe, cập nhật selectedVehicle và tính lại các trường
+    if (name === 'vehicle_id') {
+      const veh = vehicles.find(v => v.id === parseInt(value));
+      setSelectedVehicle(veh || null);
+      const auto = calcAutoFields(newData.km_start, newData.km_end, veh);
+      Object.assign(newData, auto);
+    }
+
+    // Tự động tính tổng Km và các trường phụ thuộc khi km_start hoặc km_end thay đổi
     if (name === 'km_start' || name === 'km_end') {
-      const start = parseFloat(name === 'km_start' ? value : newData.km_start) || 0;
-      const end = parseFloat(name === 'km_end' ? value : newData.km_end) || 0;
-      newData.km_total = end >= start ? (end - start).toFixed(1) : '';
+      const auto = calcAutoFields(newData.km_start, newData.km_end, selectedVehicle);
+      Object.assign(newData, auto);
     }
 
     setFormData(newData);
@@ -126,6 +160,10 @@ function ScheduleForm() {
       if (user?.role === 'driver') {
         delete payload.driver_id;
       }
+      // Xóa các trường tính toán (server sẽ tự tính)
+      delete payload.km_total;
+      delete payload.amount_before_tax;
+      delete payload.fuel_consumed;
 
       const response = await fetch(url, {
         method,
@@ -156,6 +194,11 @@ function ScheduleForm() {
     );
   }
 
+  const fmtCurrency = (val) => {
+    if (!val) return '';
+    return new Intl.NumberFormat('vi-VN').format(parseFloat(val)) + ' VNĐ';
+  };
+
   return (
     <div className="max-w-2xl mx-auto">
       {/* Tiêu đề */}
@@ -179,11 +222,11 @@ function ScheduleForm() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Lái xe - chỉ hiển thị nếu là admin hoặc fleet_manager */}
-          {['admin', 'fleet_manager'].includes(user?.role) && (
+          {/* Người lái */}
+          {['admin', 'fleet_manager'].includes(user?.role) ? (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Lái Xe <span className="text-red-500">*</span>
+                Người Lái <span className="text-red-500">*</span>
               </label>
               <select
                 name="driver_id"
@@ -197,6 +240,16 @@ function ScheduleForm() {
                   <option key={d.id} value={d.id}>{d.full_name} ({d.username})</option>
                 ))}
               </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Người Lái</label>
+              <input
+                type="text"
+                value={user?.full_name || ''}
+                readOnly
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+              />
             </div>
           )}
 
@@ -217,7 +270,7 @@ function ScheduleForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phương Tiện <span className="text-red-500">*</span>
+                BKS (Biển Kiểm Soát) <span className="text-red-500">*</span>
               </label>
               <select
                 name="vehicle_id"
@@ -270,7 +323,7 @@ function ScheduleForm() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Km Bắt Đầu <span className="text-red-500">*</span>
+                Số KM Điểm Đi <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -286,7 +339,7 @@ function ScheduleForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Km Kết Thúc <span className="text-red-500">*</span>
+                Số KM Kết Thúc <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
@@ -302,15 +355,53 @@ function ScheduleForm() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tổng Km (tự tính)
+                Tổng Số KM (tự tính)
               </label>
               <input
                 type="text"
-                value={formData.km_total}
+                value={formData.km_total ? `${formData.km_total} km` : ''}
                 readOnly
                 placeholder="Tự động tính"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
               />
+            </div>
+          </div>
+
+          {/* Thành tiền và xăng */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Thành Tiền Trước Thuế (tự tính)
+              </label>
+              <input
+                type="text"
+                value={formData.amount_before_tax ? fmtCurrency(formData.amount_before_tax) : ''}
+                readOnly
+                placeholder="Tự động tính"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-blue-50 text-blue-700 font-semibold cursor-not-allowed"
+              />
+              {selectedVehicle && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Đơn giá: {new Intl.NumberFormat('vi-VN').format(selectedVehicle.price_per_km)} VNĐ/km
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Xăng Dầu Tiêu Thụ (tự tính)
+              </label>
+              <input
+                type="text"
+                value={formData.fuel_consumed ? `${formData.fuel_consumed} lít` : ''}
+                readOnly
+                placeholder="Tự động tính"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-green-50 text-green-700 font-semibold cursor-not-allowed"
+              />
+              {selectedVehicle && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Định mức: {selectedVehicle.fuel_rate} lít/100km
+                </p>
+              )}
             </div>
           </div>
 

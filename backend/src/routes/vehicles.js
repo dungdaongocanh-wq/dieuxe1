@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
  */
 router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
   try {
-    const { license_plate, vehicle_type, notes } = req.body;
+    const { license_plate, vehicle_type, notes, fuel_rate, price_per_km } = req.body;
 
     if (!license_plate) {
       return res.status(400).json({ message: 'Biển số xe là bắt buộc' });
@@ -41,8 +41,10 @@ router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
     }
 
     const result = db.prepare(
-      'INSERT INTO vehicles (license_plate, vehicle_type, notes) VALUES (?, ?, ?)'
-    ).run(license_plate, vehicle_type || null, notes || null);
+      'INSERT INTO vehicles (license_plate, vehicle_type, notes, fuel_rate, price_per_km) VALUES (?, ?, ?, ?, ?)'
+    ).run(license_plate, vehicle_type || null, notes || null,
+          fuel_rate !== undefined ? parseFloat(fuel_rate) : 8.5,
+          price_per_km !== undefined ? parseFloat(price_per_km) : 10000);
 
     const newVehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(newVehicle);
@@ -59,7 +61,7 @@ router.post('/', requireRole('admin', 'fleet_manager'), (req, res) => {
 router.put('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
   try {
     const { id } = req.params;
-    const { license_plate, vehicle_type, notes, is_active } = req.body;
+    const { license_plate, vehicle_type, notes, is_active, fuel_rate, price_per_km } = req.body;
 
     const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(id);
     if (!vehicle) {
@@ -76,13 +78,15 @@ router.put('/:id', requireRole('admin', 'fleet_manager'), (req, res) => {
 
     db.prepare(`
       UPDATE vehicles SET
-        license_plate = ?, vehicle_type = ?, notes = ?, is_active = ?
+        license_plate = ?, vehicle_type = ?, notes = ?, is_active = ?, fuel_rate = ?, price_per_km = ?
       WHERE id = ?
     `).run(
       license_plate || vehicle.license_plate,
       vehicle_type !== undefined ? vehicle_type : vehicle.vehicle_type,
       notes !== undefined ? notes : vehicle.notes,
       is_active !== undefined ? is_active : vehicle.is_active,
+      fuel_rate !== undefined ? parseFloat(fuel_rate) : vehicle.fuel_rate,
+      price_per_km !== undefined ? parseFloat(price_per_km) : vehicle.price_per_km,
       id
     );
 

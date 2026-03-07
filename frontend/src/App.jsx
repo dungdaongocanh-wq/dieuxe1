@@ -11,6 +11,7 @@ import ScheduleForm from './components/ScheduleForm';
 import VehicleManager from './components/VehicleManager';
 import UserManager from './components/UserManager';
 import CustomerManager from './components/CustomerManager';
+import ReportPage from './components/ReportPage';
 
 /**
  * Layout chính cho các trang được bảo vệ (có Navbar)
@@ -116,6 +117,18 @@ function App() {
               <PrivateRoute allowedRoles={['admin', 'fleet_manager']}>
                 <ProtectedLayout>
                   <CustomerManager />
+                </ProtectedLayout>
+              </PrivateRoute>
+            }
+          />
+
+          {/* Báo cáo - admin, accountant, fleet_manager */}
+          <Route
+            path="/reports"
+            element={
+              <PrivateRoute allowedRoles={['admin', 'accountant', 'fleet_manager']}>
+                <ProtectedLayout>
+                  <ReportPage />
                 </ProtectedLayout>
               </PrivateRoute>
             }

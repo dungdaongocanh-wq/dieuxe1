@@ -39,6 +39,7 @@ function Navbar() {
       { path: '/schedules', label: '📋 Lịch Trình', roles: ['admin', 'accountant', 'fleet_manager', 'driver'] },
       { path: '/vehicles', label: '🚗 Phương Tiện', roles: ['admin', 'fleet_manager'] },
       { path: '/customers', label: '🏢 Khách Hàng', roles: ['admin', 'fleet_manager'] },
+      { path: '/reports', label: '📈 Báo Cáo', roles: ['admin', 'accountant', 'fleet_manager'] },
       { path: '/users', label: '👥 Người Dùng', roles: ['admin'] },
     ];
 
