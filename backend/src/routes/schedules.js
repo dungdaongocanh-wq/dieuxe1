@@ -136,6 +136,24 @@ router.get('/', (req, res) => {
       params.push(req.query.vehicle_id);
     }
 
+    // Lọc theo ngày bắt đầu
+    if (req.query.date_from) {
+      conditions.push('s.trip_date >= ?');
+      params.push(req.query.date_from);
+    }
+
+    // Lọc theo ngày kết thúc
+    if (req.query.date_to) {
+      conditions.push('s.trip_date <= ?');
+      params.push(req.query.date_to);
+    }
+
+    // Lọc theo loại xe
+    if (req.query.vehicle_type) {
+      conditions.push('v.vehicle_type LIKE ?');
+      params.push('%' + req.query.vehicle_type + '%');
+    }
+
     // Lọc theo trạng thái
     if (req.query.status) {
       conditions.push('s.status = ?');

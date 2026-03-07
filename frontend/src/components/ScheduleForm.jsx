@@ -394,40 +394,21 @@ function ScheduleForm() {
             </div>
           </div>
 
-          {/* Xăng tiêu thụ và tiền vé cầu đường */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Xăng Dầu Tiêu Thụ (tự tính)
-              </label>
-              <input
-                type="text"
-                value={formData.fuel_consumed ? `${formData.fuel_consumed} lít` : ''}
-                readOnly
-                placeholder="Tự động tính"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-green-50 text-green-700 font-semibold cursor-not-allowed"
-              />
-              {selectedVehicle && (
-                <p className="text-xs text-gray-400 mt-1">
-                  Định mức: {selectedVehicle.fuel_rate} lít/100km
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tiền Vé Cầu Đường (VNĐ)
-              </label>
-              <input
-                type="number"
-                name="toll_fee"
-                value={formData.toll_fee}
-                onChange={handleChange}
-                min="0"
-                step="1000"
-                placeholder="0"
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
+          {/* Tiền vé cầu đường */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tiền Vé Cầu Đường (VNĐ)
+            </label>
+            <input
+              type="number"
+              name="toll_fee"
+              value={formData.toll_fee}
+              onChange={handleChange}
+              min="0"
+              step="1000"
+              placeholder="0"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            />
           </div>
 
           {/* Ghi chú */}

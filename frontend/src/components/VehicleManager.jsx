@@ -2,6 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
+// Format ngày hết hạn
+const fmtExpiry = (dateStr) => {
+  if (!dateStr) return '—';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('vi-VN');
+};
+
 // Form thêm/sửa phương tiện
 function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
   const [formData, setFormData] = useState({
@@ -9,7 +15,9 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
     vehicle_type: vehicle?.vehicle_type || '',
     notes: vehicle?.notes || '',
     fuel_rate: vehicle?.fuel_rate !== undefined ? vehicle.fuel_rate : 8.5,
-    price_per_km: vehicle?.price_per_km !== undefined ? vehicle.price_per_km : 10000,
+    payload_tons: vehicle?.payload_tons != null ? vehicle.payload_tons : '',
+    registration_expiry: vehicle?.registration_expiry || '',
+    insurance_expiry: vehicle?.insurance_expiry || '',
     is_active: vehicle?.is_active !== undefined ? vehicle.is_active : 1
   });
   const [error, setError] = useState('');
@@ -100,15 +108,40 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Đơn Giá (VNĐ/km)
+                Tải Trọng (tấn)
               </label>
               <input
                 type="number"
-                value={formData.price_per_km}
-                onChange={e => setFormData(f => ({ ...f, price_per_km: e.target.value }))}
+                value={formData.payload_tons}
+                onChange={e => setFormData(f => ({ ...f, payload_tons: e.target.value }))}
                 min="0"
-                step="100"
-                placeholder="10000"
+                step="0.5"
+                placeholder="VD: 5.0"
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Thời Hạn Đăng Kiểm
+              </label>
+              <input
+                type="date"
+                value={formData.registration_expiry}
+                onChange={e => setFormData(f => ({ ...f, registration_expiry: e.target.value }))}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Thời Hạn Bảo Hiểm
+              </label>
+              <input
+                type="date"
+                value={formData.insurance_expiry}
+                onChange={e => setFormData(f => ({ ...f, insurance_expiry: e.target.value }))}
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
@@ -264,7 +297,7 @@ function VehicleManager() {
             <table className="w-full min-w-[800px]">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['STT', 'Biển Số Xe', 'Loại Xe', 'Định Mức Xăng', 'Đơn Giá', 'Ghi Chú', 'Trạng Thái', 'Ngày Thêm', 'Thao Tác'].map(h => (
+                  {['STT', 'Biển Số Xe', 'Loại Xe', 'Tải Trọng', 'Định Mức Xăng', 'Đ.Kiểm', 'B.Hiểm', 'Ghi Chú', 'Trạng Thái', 'Ngày Thêm', 'Thao Tác'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -280,12 +313,16 @@ function VehicleManager() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">{vehicle.vehicle_type || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">
+                      {vehicle.payload_tons != null ? vehicle.payload_tons + ' tấn' : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
                       {vehicle.fuel_rate != null ? vehicle.fuel_rate + ' lít/100km' : '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      {vehicle.price_per_km != null
-                        ? new Intl.NumberFormat('vi-VN').format(vehicle.price_per_km) + ' VNĐ/km'
-                        : '—'}
+                      {fmtExpiry(vehicle.registration_expiry)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      {fmtExpiry(vehicle.insurance_expiry)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{vehicle.notes || '—'}</td>
                     <td className="px-4 py-3">

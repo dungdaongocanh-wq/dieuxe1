@@ -91,6 +91,7 @@ function ScheduleTable() {
   const [schedules, setSchedules] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -98,10 +99,13 @@ function ScheduleTable() {
 
   // Bộ lọc
   const [filters, setFilters] = useState({
-    month: getCurrentMonth(),
+    date_from: '',
+    date_to: '',
     driver_id: '',
     vehicle_id: '',
-    status: ''
+    vehicle_type: '',
+    status: '',
+    customer_id: ''
   });
 
   useEffect(() => {
@@ -111,10 +115,13 @@ function ScheduleTable() {
   const fetchSchedules = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (filters.month) params.append('month', filters.month);
+      if (filters.date_from) params.append('date_from', filters.date_from);
+      if (filters.date_to) params.append('date_to', filters.date_to);
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
+      if (filters.vehicle_type) params.append('vehicle_type', filters.vehicle_type);
       if (filters.status) params.append('status', filters.status);
+      if (filters.customer_id) params.append('customer_id', filters.customer_id);
       // customer: backend tự lọc theo customer_id, không cần thêm param
 
       const res = await fetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
@@ -148,6 +155,8 @@ function ScheduleTable() {
           const users = await usersRes.json();
           setDrivers(users.filter(u => u.role === 'driver'));
         }
+        const customersRes = await fetch('/api/customers', { headers });
+        if (customersRes.ok) setCustomers(await customersRes.json());
       }
     } catch (err) {
       console.error('Lỗi khi tải dữ liệu ban đầu:', err);
@@ -219,7 +228,7 @@ function ScheduleTable() {
    * Xuất CSV
    */
   const handleExportCSV = () => {
-    const headers = ['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến', 'Số KM Đi', 'Số KM Kết Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)', 'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ (lít)', 'Trạng Thái', 'Người Duyệt', 'Ngày Duyệt'];
+    const headers = ['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến', 'Số KM Đi', 'Số KM Kết Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)', 'BKS', 'Loại Xe', 'Ghi Chú', 'Trạng Thái', 'Người Duyệt', 'Ngày Duyệt'];
     const rows = schedules.map((s, i) => [
       i + 1,
       s.driver_name,
@@ -231,8 +240,8 @@ function ScheduleTable() {
       s.km_total != null ? s.km_total.toFixed(1) : '',
       s.amount_before_tax != null ? s.amount_before_tax.toFixed(0) : '',
       s.license_plate,
+      s.vehicle_type || '',
       s.notes || '',
-      s.fuel_consumed != null ? s.fuel_consumed.toFixed(2) : '',
       statusConfig[s.status]?.label || s.status,
       s.approved_by || '',
       s.approved_at ? fmtDateTime(s.approved_at) : ''
@@ -247,7 +256,7 @@ function ScheduleTable() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lich-trinh-${filters.month || 'all'}.csv`;
+    a.download = `lich-trinh-${filters.date_from || filters.date_to || 'all'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -263,7 +272,7 @@ function ScheduleTable() {
    * Reset bộ lọc
    */
   const resetFilters = () => {
-    setFilters({ month: getCurrentMonth(), driver_id: '', vehicle_id: '', status: '' });
+    setFilters({ date_from: '', date_to: '', driver_id: '', vehicle_id: '', vehicle_type: '', status: '', customer_id: '' });
   };
 
   // Kiểm tra quyền duyệt
@@ -281,7 +290,23 @@ function ScheduleTable() {
   // Tổng hợp
   const totalKm = schedules.reduce((sum, s) => sum + (s.km_total || 0), 0);
   const totalAmount = schedules.reduce((sum, s) => sum + (s.amount_before_tax || 0), 0);
-  const totalFuel = schedules.reduce((sum, s) => sum + (s.fuel_consumed || 0), 0);
+
+  // Tóm tắt theo xe
+  const vehicleSummary = Object.values(
+    schedules.reduce((acc, s) => {
+      const key = s.vehicle_id;
+      if (!acc[key]) {
+        const veh = vehicles.find(v => v.id === s.vehicle_id);
+        acc[key] = {
+          license_plate: veh?.license_plate || s.license_plate,
+          vehicle_type: veh?.vehicle_type || s.vehicle_type,
+          km: 0
+        };
+      }
+      acc[key].km += (s.km_total || 0);
+      return acc;
+    }, {})
+  );
 
   return (
     <div className="space-y-4">
@@ -313,13 +338,23 @@ function ScheduleTable() {
 
       {/* Bộ lọc */}
       <div className="bg-white rounded-xl shadow p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Tháng/Năm</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Từ Ngày</label>
             <input
-              type="month"
-              value={filters.month}
-              onChange={e => setFilters(f => ({ ...f, month: e.target.value }))}
+              type="date"
+              value={filters.date_from}
+              onChange={e => setFilters(f => ({ ...f, date_from: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Đến Ngày</label>
+            <input
+              type="date"
+              value={filters.date_to}
+              onChange={e => setFilters(f => ({ ...f, date_to: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -355,6 +390,17 @@ function ScheduleTable() {
           </div>
 
           <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Loại Xe</label>
+            <input
+              type="text"
+              value={filters.vehicle_type}
+              onChange={e => setFilters(f => ({ ...f, vehicle_type: e.target.value }))}
+              placeholder="Tìm loại xe..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Trạng Thái</label>
             <select
               value={filters.status}
@@ -367,6 +413,22 @@ function ScheduleTable() {
               <option value="rejected">Từ chối</option>
             </select>
           </div>
+
+          {['admin', 'fleet_manager', 'accountant'].includes(user?.role) && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Công Ty</label>
+              <select
+                value={filters.customer_id}
+                onChange={e => setFilters(f => ({ ...f, customer_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">Tất cả</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>{c.short_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex items-end">
             <button
@@ -381,18 +443,19 @@ function ScheduleTable() {
 
       {/* Tổng hợp */}
       {schedules.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
-            <p className="text-xs text-blue-600 font-medium">Tổng KM</p>
-            <p className="text-lg font-bold text-blue-800">{totalKm.toFixed(1)} km</p>
-          </div>
-          <div className="bg-green-50 rounded-xl p-3 border border-green-100 text-center">
-            <p className="text-xs text-green-600 font-medium">Tổng Thành Tiền</p>
-            <p className="text-lg font-bold text-green-800">{new Intl.NumberFormat('vi-VN').format(totalAmount)} VNĐ</p>
-          </div>
-          <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 text-center">
-            <p className="text-xs text-orange-600 font-medium">Tổng Xăng</p>
-            <p className="text-lg font-bold text-orange-800">{totalFuel.toFixed(2)} lít</p>
+        <div className="bg-white rounded-xl shadow p-4 border border-blue-100">
+          <div className="flex flex-wrap gap-6 items-start">
+            <div className="flex-1 min-w-[180px]">
+              {vehicleSummary.map(vs => (
+                <p key={vs.license_plate} className="text-sm text-gray-700">
+                  Xe {vs.license_plate}{vs.vehicle_type ? ` (${vs.vehicle_type})` : ''} - số KM: <span className="font-semibold text-blue-700">{vs.km.toFixed(1)}</span>
+                </p>
+              ))}
+            </div>
+            <div className="flex flex-col gap-1 text-right shrink-0">
+              <p className="text-sm font-semibold text-blue-700">Tổng Số KM: {totalKm.toFixed(1)} km</p>
+              <p className="text-sm font-semibold text-green-700">Số Tiền Hiện Tại phải Thanh Toán: {new Intl.NumberFormat('vi-VN').format(totalAmount)} VNĐ</p>
+            </div>
           </div>
         </div>
       )}
@@ -417,7 +480,7 @@ function ScheduleTable() {
                   <tr>
                     {['STT', 'Người Lái', 'Ngày', 'Điểm Đi', 'Điểm Đến',
                       'Số KM Đi', 'Số KM K.Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế',
-                      'BKS', 'Ghi Chú', 'Xăng Tiêu Thụ', 'Trạng Thái', 'Thao Tác',
+                      'BKS', 'Loại Xe', 'Ghi Chú', 'Trạng Thái', 'Thao Tác',
                       'Người Duyệt', 'Ngày Duyệt'
                     ].map(h => (
                       <th key={h} className="text-left px-3 py-3 text-xs font-semibold uppercase whitespace-nowrap">
@@ -463,11 +526,11 @@ function ScheduleTable() {
                           {schedule.license_plate}
                         </span>
                       </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">
+                        {schedule.vehicle_type || '—'}
+                      </td>
                       <td className="px-3 py-3 text-sm text-gray-500 max-w-[80px] truncate">
                         {schedule.notes || '—'}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-right text-orange-700 whitespace-nowrap">
-                        {schedule.fuel_consumed != null ? schedule.fuel_consumed.toFixed(2) + ' lít' : '—'}
                       </td>
                       <td className="px-3 py-3">
                         <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border ${statusConfig[schedule.status]?.class}`}>

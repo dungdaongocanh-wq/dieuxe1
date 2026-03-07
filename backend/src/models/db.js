@@ -47,10 +47,10 @@ function initializeDatabase() {
       id_card_number TEXT,
       id_card_issued_by TEXT,
       id_card_issued_date DATE,
-      user_type TEXT NOT NULL DEFAULT 'driver' CHECK(user_type IN ('driver', 'customer', 'manager')),
+      user_type TEXT NOT NULL DEFAULT 'driver',
       customer_id INTEGER,
       position TEXT,
-      role TEXT NOT NULL CHECK(role IN ('admin', 'accountant', 'fleet_manager', 'driver')),
+      role TEXT NOT NULL DEFAULT 'driver',
       is_active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (customer_id) REFERENCES customers(id)
@@ -82,6 +82,38 @@ function initializeDatabase() {
     db.exec('ALTER TABLE users ADD COLUMN position TEXT');
   }
 
+  // Migration: Xóa CHECK constraint trên cột role để cho phép role='customer'
+  try {
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get();
+    if (tableInfo && tableInfo.sql && tableInfo.sql.includes('CHECK(role IN')) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          date_of_birth DATE,
+          id_card_number TEXT,
+          id_card_issued_by TEXT,
+          id_card_issued_date DATE,
+          user_type TEXT NOT NULL DEFAULT 'driver',
+          customer_id INTEGER,
+          position TEXT,
+          role TEXT NOT NULL DEFAULT 'driver',
+          is_active INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (customer_id) REFERENCES customers(id)
+        )
+      `);
+      db.exec('INSERT OR IGNORE INTO users_new SELECT * FROM users');
+      db.exec('DROP TABLE users');
+      db.exec('ALTER TABLE users_new RENAME TO users');
+      console.log('✅ Đã migration bảng users: xóa CHECK constraint trên role');
+    }
+  } catch (e) {
+    console.error('Migration users table error:', e.message);
+  }
+
   // Bảng phương tiện
   db.exec(`
     CREATE TABLE IF NOT EXISTS vehicles (
@@ -103,6 +135,15 @@ function initializeDatabase() {
   }
   if (!vehicleColumns.includes('price_per_km')) {
     db.exec('ALTER TABLE vehicles ADD COLUMN price_per_km REAL DEFAULT 10000');
+  }
+  if (!vehicleColumns.includes('payload_tons')) {
+    db.exec('ALTER TABLE vehicles ADD COLUMN payload_tons REAL');
+  }
+  if (!vehicleColumns.includes('registration_expiry')) {
+    db.exec('ALTER TABLE vehicles ADD COLUMN registration_expiry DATE');
+  }
+  if (!vehicleColumns.includes('insurance_expiry')) {
+    db.exec('ALTER TABLE vehicles ADD COLUMN insurance_expiry DATE');
   }
 
   // Bảng lịch trình
