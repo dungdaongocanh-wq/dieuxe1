@@ -12,6 +12,7 @@ function ScheduleForm() {
   const [drivers, setDrivers] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [pricingInfo, setPricingInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
@@ -28,6 +29,7 @@ function ScheduleForm() {
     km_end: '',
     km_total: '',
     fuel_consumed: '',
+    amount_before_tax: '',
     toll_fee: '',
     notes: ''
   });
@@ -37,6 +39,48 @@ function ScheduleForm() {
   useEffect(() => {
     fetchInitialData();
   }, [id]);
+
+  /**
+   * Tự động lấy giá tính theo combo hoặc per_km khi km_total, vehicle_id hoặc customer_id thay đổi
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchPricing = async () => {
+      const kmTotal = parseFloat(formData.km_total);
+      if (!formData.vehicle_id || !kmTotal || kmTotal <= 0) {
+        if (!cancelled) {
+          setFormData(prev => ({ ...prev, amount_before_tax: '' }));
+          setPricingInfo(null);
+        }
+        return;
+      }
+
+      try {
+        const headers = getAuthHeaders();
+        let url = `/api/schedules/pricing-preview?vehicle_id=${formData.vehicle_id}&km_total=${kmTotal}`;
+        if (formData.customer_id) {
+          url += `&customer_id=${formData.customer_id}`;
+        }
+
+        const res = await fetch(url, { headers });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setFormData(prev => ({ ...prev, amount_before_tax: Math.round(data.amount_before_tax) }));
+          setPricingInfo(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error('Lỗi khi tính giá:', err);
+        }
+      }
+    };
+
+    fetchPricing();
+
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.km_total, formData.vehicle_id, formData.customer_id]);
 
   /**
    * Tính toán các trường tự động dựa trên km và xe
@@ -108,6 +152,7 @@ function ScheduleForm() {
             km_end: schedule.km_end,
             km_total: schedule.km_total != null ? schedule.km_total.toFixed(1) : '',
             fuel_consumed: schedule.fuel_consumed != null ? schedule.fuel_consumed.toFixed(2) : '',
+            amount_before_tax: schedule.amount_before_tax != null ? schedule.amount_before_tax : '',
             toll_fee: schedule.toll_fee != null ? schedule.toll_fee : '',
             notes: schedule.notes || ''
           });
@@ -392,6 +437,27 @@ function ScheduleForm() {
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
               />
             </div>
+          </div>
+
+          {/* Thành tiền trước thuế */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Thành Tiền Trước Thuế (tự tính)
+            </label>
+            <input
+              type="text"
+              value={formData.amount_before_tax !== '' ? Number(formData.amount_before_tax).toLocaleString('vi-VN') + ' VNĐ' : ''}
+              readOnly
+              placeholder="Tự động tính"
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+            />
+            {pricingInfo && (
+              <p className="mt-1 text-xs text-gray-500">
+                {pricingInfo.pricing_type === 'combo'
+                  ? `Gói combo: ${Number(pricingInfo.pricing_detail.combo_km_threshold).toLocaleString('vi-VN')} km × ${Number(pricingInfo.pricing_detail.combo_price).toLocaleString('vi-VN')} VNĐ/km, vượt: ${Number(pricingInfo.pricing_detail.price_per_km_after).toLocaleString('vi-VN')} VNĐ/km`
+                  : `Đơn giá: ${Number(pricingInfo.pricing_detail.price_per_km).toLocaleString('vi-VN')} VNĐ/km`}
+              </p>
+            )}
           </div>
 
           {/* Tiền vé cầu đường */}
