@@ -141,6 +141,15 @@ function initializeDatabase() {
   if (!scheduleColumns.includes('toll_fee')) {
     db.exec('ALTER TABLE schedules ADD COLUMN toll_fee REAL DEFAULT 0');
   }
+  if (!scheduleColumns.includes('approved_by')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN approved_by TEXT');
+  }
+  if (!scheduleColumns.includes('approved_at')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN approved_at DATETIME');
+  }
+  if (!scheduleColumns.includes('rejection_reason')) {
+    db.exec('ALTER TABLE schedules ADD COLUMN rejection_reason TEXT');
+  }
 
   // Bảng cấu hình giá theo xe / khách hàng
   db.exec(`

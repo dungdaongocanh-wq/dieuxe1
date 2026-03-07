@@ -1,7 +1,7 @@
 // Ứng dụng chính với React Router - định nghĩa tất cả routes
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Navbar from './components/Navbar';
 import Login from './components/Login';
@@ -28,6 +28,14 @@ function ProtectedLayout({ children }) {
   );
 }
 
+/**
+ * Redirect từ / đến trang phù hợp với role
+ */
+function RootRedirect() {
+  const { user } = useAuth();
+  return <Navigate to={user?.role === 'customer' ? '/schedules' : '/dashboard'} replace />;
+}
+
 function App() {
   return (
     <AuthProvider>
@@ -36,14 +44,14 @@ function App() {
           {/* Trang đăng nhập - công khai */}
           <Route path="/login" element={<Login />} />
 
-          {/* Chuyển hướng từ / đến /dashboard */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* Chuyển hướng từ / đến trang phù hợp với role */}
+          <Route path="/" element={<PrivateRoute><RootRedirect /></PrivateRoute>} />
 
-          {/* Trang tổng quan - tất cả vai trò */}
+          {/* Trang tổng quan - không cho customer */}
           <Route
             path="/dashboard"
             element={
-              <PrivateRoute>
+              <PrivateRoute allowedRoles={['admin', 'accountant', 'fleet_manager', 'driver']}>
                 <ProtectedLayout>
                   <Dashboard />
                 </ProtectedLayout>
@@ -51,7 +59,7 @@ function App() {
             }
           />
 
-          {/* Danh sách lịch trình - tất cả vai trò */}
+          {/* Danh sách lịch trình - tất cả vai trò kể cả customer */}
           <Route
             path="/schedules"
             element={

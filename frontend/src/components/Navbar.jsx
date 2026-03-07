@@ -8,7 +8,8 @@ const roleLabels = {
   admin: '👑 Quản Trị Viên',
   accountant: '📊 Kế Toán',
   fleet_manager: '🚛 Quản Lý Xe',
-  driver: '🚗 Lái Xe'
+  driver: '🚗 Lái Xe',
+  customer: '🏢 Khách Hàng'
 };
 
 function Navbar() {
@@ -43,7 +44,7 @@ function Navbar() {
   const getNavItems = () => {
     const items = [
       { path: '/dashboard', label: '📊 Tổng Quan', roles: ['admin', 'accountant', 'fleet_manager', 'driver'] },
-      { path: '/schedules', label: '📋 Lịch Trình', roles: ['admin', 'accountant', 'fleet_manager', 'driver'] },
+      { path: '/schedules', label: '📋 Lịch Trình', roles: ['admin', 'accountant', 'fleet_manager', 'driver', 'customer'] },
       { path: '/vehicles', label: '🚗 Phương Tiện', roles: ['admin', 'fleet_manager'] },
       { path: '/customers', label: '🏢 Khách Hàng', roles: ['admin', 'fleet_manager'] },
       { path: '/customers/stats', label: '📈 TK Khách Hàng', roles: ['admin', 'accountant', 'fleet_manager'] },

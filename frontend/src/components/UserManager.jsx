@@ -7,7 +7,8 @@ const roleLabels = {
   admin: '👑 Quản Trị Viên',
   accountant: '📊 Kế Toán',
   fleet_manager: '🚛 Quản Lý Xe',
-  driver: '🚗 Lái Xe'
+  driver: '🚗 Lái Xe',
+  customer: '🏢 Khách hàng'
 };
 
 // Nhãn hiển thị cho loại người dùng
@@ -51,6 +52,13 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Tự động gán role = 'customer' khi user_type = 'customer'
+  useEffect(() => {
+    if (formData.user_type === 'customer') {
+      setFormData(f => ({ ...f, role: 'customer' }));
+    }
+  }, [formData.user_type]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -58,6 +66,12 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
     // Khi thêm mới, mật khẩu bắt buộc
     if (!userToEdit && !formData.password) {
       setError('Mật khẩu là bắt buộc khi tạo người dùng mới');
+      return;
+    }
+
+    // Khi user_type = 'customer', bắt buộc chọn công ty
+    if (formData.user_type === 'customer' && !formData.customer_id) {
+      setError('Vui lòng chọn công ty cho tài khoản Khách hàng');
       return;
     }
 
@@ -266,7 +280,8 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
             )}
           </div>
 
-          {/* Vai trò hệ thống */}
+          {/* Vai trò hệ thống - ẩn khi user_type = 'customer' */}
+          {formData.user_type !== 'customer' && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Vai trò hệ thống <span className="text-red-500">*</span>
@@ -282,6 +297,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
               <option value="admin">👑 Quản Trị Viên</option>
             </select>
           </div>
+          )}
 
           {/* Trạng thái hoạt động */}
           <div className="flex items-center gap-2">
