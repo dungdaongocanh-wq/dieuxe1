@@ -1,6 +1,7 @@
 // Component quản lý phương tiện (xe)
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Format ngày hết hạn
 const fmtExpiry = (dateStr) => {
@@ -32,7 +33,7 @@ function VehicleFormModal({ vehicle, onSave, onClose, getAuthHeaders }) {
       const url = vehicle ? `/api/vehicles/${vehicle.id}` : '/api/vehicles';
       const method = vehicle ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(formData)
@@ -206,7 +207,7 @@ function VehicleManager() {
 
   const fetchVehicles = async () => {
     try {
-      const res = await fetch('/api/vehicles', { headers: getAuthHeaders() });
+      const res = await apiFetch('/api/vehicles', { headers: getAuthHeaders() });
       if (res.ok) setVehicles(await res.json());
     } catch (err) {
       console.error('Lỗi khi tải phương tiện:', err);
@@ -236,7 +237,7 @@ function VehicleManager() {
    */
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`/api/vehicles/${id}`, {
+      const res = await apiFetch(`/api/vehicles/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });

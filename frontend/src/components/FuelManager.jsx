@@ -1,6 +1,7 @@
 // Component quản lý nạp nhiên liệu
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Format tiền VNĐ
 const fmtCurrency = (val) => {
@@ -81,7 +82,7 @@ function FuelManager() {
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
 
-      const res = await fetch(`/api/fuel-logs?${params}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/fuel-logs?${params}`, { headers: getAuthHeaders() });
       if (res.ok) {
         setLogs(await res.json());
         setPage(1);
@@ -99,9 +100,9 @@ function FuelManager() {
   // Tải xe và lái xe khi mount
   useEffect(() => {
     const headers = getAuthHeaders();
-    const fetchVehicles = fetch('/api/vehicles', { headers }).then(r => r.ok ? r.json() : []);
+    const fetchVehicles = apiFetch('/api/vehicles', { headers }).then(r => r.ok ? r.json() : []);
     const fetchUsers = isAdminOrManager
-      ? fetch('/api/users', { headers }).then(r => r.ok ? r.json() : [])
+      ? apiFetch('/api/users', { headers }).then(r => r.ok ? r.json() : [])
       : Promise.resolve([]);
 
     Promise.all([fetchVehicles, fetchUsers]).then(([v, u]) => {
@@ -215,7 +216,7 @@ function FuelManager() {
       const url = editingLog ? `/api/fuel-logs/${editingLog.id}` : '/api/fuel-logs';
       const method = editingLog ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(body)
@@ -242,7 +243,7 @@ function FuelManager() {
   const handleDelete = async (id) => {
     if (!window.confirm('Bạn có chắc muốn xóa bản ghi này?')) return;
     try {
-      const res = await fetch(`/api/fuel-logs/${id}`, {
+      const res = await apiFetch(`/api/fuel-logs/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -264,7 +265,7 @@ function FuelManager() {
    */
   const handleViewAttachment = async (id, mimeType) => {
     try {
-      const res = await fetch(`/api/fuel-logs/${id}/attachment`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/fuel-logs/${id}/attachment`, { headers: getAuthHeaders() });
       if (!res.ok) {
         alert('Không thể tải file đính kèm');
         return;

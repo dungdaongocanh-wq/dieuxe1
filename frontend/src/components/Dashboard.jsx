@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Card thống kê
 function StatCard({ icon, title, value, color, subtitle }) {
@@ -45,8 +46,8 @@ function Dashboard() {
   const fetchData = async () => {
     try {
       const [schedulesRes, vehiclesRes] = await Promise.all([
-        fetch('/api/schedules', { headers: getAuthHeaders() }),
-        fetch('/api/vehicles', { headers: getAuthHeaders() })
+        apiFetch('/api/schedules', { headers: getAuthHeaders() }),
+        apiFetch('/api/vehicles', { headers: getAuthHeaders() })
       ]);
 
       if (schedulesRes.ok) setSchedules(await schedulesRes.json());

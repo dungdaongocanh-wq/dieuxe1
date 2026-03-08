@@ -1,6 +1,7 @@
 // Component quản lý khách hàng (admin và fleet_manager)
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Form thêm/sửa khách hàng
 function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) {
@@ -21,7 +22,7 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
-        const res = await fetch('/api/vehicles', { headers: getAuthHeaders() });
+        const res = await apiFetch('/api/vehicles', { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setVehicles(data.filter(v => v.is_active));
@@ -34,7 +35,7 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
     const fetchPricing = async () => {
       if (!customerToEdit) return;
       try {
-        const res = await fetch(`/api/customers/${customerToEdit.id}/pricing`, { headers: getAuthHeaders() });
+        const res = await apiFetch(`/api/customers/${customerToEdit.id}/pricing`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           setExistingPricing(data);
@@ -89,7 +90,7 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
       const url = customerToEdit ? `/api/customers/${customerToEdit.id}` : '/api/customers';
       const method = customerToEdit ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(formData)
@@ -114,13 +115,13 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
         };
 
         if (row.isExisting && row.id) {
-          await fetch(`/api/customers/${savedCustomerId}/pricing/${row.id}`, {
+          await apiFetch(`/api/customers/${savedCustomerId}/pricing/${row.id}`, {
             method: 'PUT',
             headers: getAuthHeaders(),
             body: JSON.stringify(pricingPayload)
           });
         } else {
-          await fetch(`/api/customers/${savedCustomerId}/pricing`, {
+          await apiFetch(`/api/customers/${savedCustomerId}/pricing`, {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify(pricingPayload)
@@ -132,7 +133,7 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
       for (const ep of existingPricing) {
         const stillExists = pricingRows.some(r => r.isExisting && r.id === ep.id);
         if (!stillExists) {
-          await fetch(`/api/customers/${savedCustomerId}/pricing/${ep.id}`, {
+          await apiFetch(`/api/customers/${savedCustomerId}/pricing/${ep.id}`, {
             method: 'DELETE',
             headers: getAuthHeaders()
           });
@@ -387,7 +388,7 @@ function CustomerManager() {
 
   const fetchCustomers = async () => {
     try {
-      const res = await fetch('/api/customers', { headers: getAuthHeaders() });
+      const res = await apiFetch('/api/customers', { headers: getAuthHeaders() });
       if (res.ok) setCustomers(await res.json());
     } catch (err) {
       console.error('Lỗi khi tải khách hàng:', err);
@@ -417,7 +418,7 @@ function CustomerManager() {
    */
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`/api/customers/${id}`, {
+      const res = await apiFetch(`/api/customers/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });

@@ -1,6 +1,7 @@
 // Component báo cáo tháng - tổng hợp lịch trình theo tháng
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 import { getPeriodFromMonth } from '../utils/billing';
 import RecalculatePricingModal from './RecalculatePricingModal';
 
@@ -49,9 +50,9 @@ function MonthlyReport() {
   useEffect(() => {
     const headers = getAuthHeaders();
     Promise.all([
-      fetch('/api/vehicles', { headers }),
-      fetch('/api/users', { headers }),
-      fetch('/api/customers', { headers })
+      apiFetch('/api/vehicles', { headers }),
+      apiFetch('/api/users', { headers }),
+      apiFetch('/api/customers', { headers })
     ]).then(async ([vRes, uRes, cRes]) => {
       if (vRes.ok) {
         const vData = await vRes.json();
@@ -78,7 +79,7 @@ function MonthlyReport() {
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
       if (filters.customer_id) params.append('customer_id', filters.customer_id);
 
-      const res = await fetch(`/api/schedules/export/monthly?${params}`, {
+      const res = await apiFetch(`/api/schedules/export/monthly?${params}`, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
@@ -93,7 +94,7 @@ function MonthlyReport() {
         const comboParams = new URLSearchParams({ period_start: periodStart, period_end: periodEnd });
         if (filters.vehicle_id) comboParams.append('vehicle_id', filters.vehicle_id);
         if (filters.customer_id) comboParams.append('customer_id', filters.customer_id);
-        const comboRes = await fetch(`/api/schedules/combo-min-check?${comboParams}`, {
+        const comboRes = await apiFetch(`/api/schedules/combo-min-check?${comboParams}`, {
           headers: getAuthHeaders()
         });
         if (comboRes.ok) {

@@ -1,6 +1,7 @@
 // Component quản lý người dùng (chỉ dành cho admin)
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Nhãn hiển thị cho từng vai trò
 const roleLabels = {
@@ -42,7 +43,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
   useEffect(() => {
     const fetchCustomers = async () => {
       try {
-        const res = await fetch('/api/customers', { headers: getAuthHeaders() });
+        const res = await apiFetch('/api/customers', { headers: getAuthHeaders() });
         if (res.ok) setCustomers(await res.json());
       } catch {
         // Bỏ qua lỗi tải khách hàng
@@ -98,7 +99,7 @@ function UserFormModal({ userToEdit, onSave, onClose, getAuthHeaders }) {
         payload.position = null;
       }
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(payload)
@@ -350,7 +351,7 @@ function UserManager() {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/users', { headers: getAuthHeaders() });
+      const res = await apiFetch('/api/users', { headers: getAuthHeaders() });
       if (res.ok) setUsers(await res.json());
     } catch (err) {
       console.error('Lỗi khi tải người dùng:', err);
@@ -380,7 +381,7 @@ function UserManager() {
    */
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`/api/users/${id}`, {
+      const res = await apiFetch(`/api/users/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 // Cấu hình màu sắc cho từng trạng thái
 const statusConfig = {
@@ -124,7 +125,7 @@ function ScheduleTable() {
       if (filters.customer_id) params.append('customer_id', filters.customer_id);
       // customer: backend tự lọc theo customer_id, không cần thêm param
 
-      const res = await fetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
       if (res.ok) setSchedules(await res.json());
     } catch (err) {
       console.error('Lỗi khi tải lịch trình:', err);
@@ -145,17 +146,17 @@ function ScheduleTable() {
     try {
       const headers = getAuthHeaders();
       const [vehiclesRes] = await Promise.all([
-        fetch('/api/vehicles', { headers })
+        apiFetch('/api/vehicles', { headers })
       ]);
       if (vehiclesRes.ok) setVehicles(await vehiclesRes.json());
 
       if (['admin', 'fleet_manager', 'accountant'].includes(user?.role)) {
-        const usersRes = await fetch('/api/users', { headers });
+        const usersRes = await apiFetch('/api/users', { headers });
         if (usersRes.ok) {
           const users = await usersRes.json();
           setDrivers(users.filter(u => u.role === 'driver'));
         }
-        const customersRes = await fetch('/api/customers', { headers });
+        const customersRes = await apiFetch('/api/customers', { headers });
         if (customersRes.ok) setCustomers(await customersRes.json());
       }
     } catch (err) {
@@ -168,7 +169,7 @@ function ScheduleTable() {
    */
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`/api/schedules/${id}`, {
+      const res = await apiFetch(`/api/schedules/${id}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -190,7 +191,7 @@ function ScheduleTable() {
    */
   const handleApprove = async (id) => {
     try {
-      const res = await fetch(`/api/schedules/${id}/status`, {
+      const res = await apiFetch(`/api/schedules/${id}/status`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: 'approved' })
@@ -209,7 +210,7 @@ function ScheduleTable() {
    */
   const handleReject = async (id, rejection_reason) => {
     try {
-      const res = await fetch(`/api/schedules/${id}/status`, {
+      const res = await apiFetch(`/api/schedules/${id}/status`, {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ status: 'rejected', rejection_reason })
