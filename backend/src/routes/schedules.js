@@ -667,6 +667,7 @@ router.get('/combo-min-check', requireRole('admin', 'fleet_manager', 'accountant
       SELECT
         v.id as vehicle_id,
         v.license_plate,
+        v.price_per_km,
         c.id as customer_id,
         c.short_name as customer_short_name,
         cvp.combo_km_threshold,
@@ -687,10 +688,25 @@ router.get('/combo-min-check', requireRole('admin', 'fleet_manager', 'accountant
     `).all(...params);
 
     const result = rows.map(row => {
-      const threshold = parseFloat(row.combo_km_threshold);
+      const threshold = parseFloat(row.combo_km_threshold) || 0;
       const comboPrice = parseFloat(row.combo_price) || 0;
-      const minAmount = threshold * comboPrice;
+      const afterPrice = parseFloat(row.price_per_km_after) || 0;
+      const totalKm = parseFloat(row.total_km_in_period) || 0;
       const totalAmountActual = parseFloat(row.total_amount_actual) || 0;
+      const pricePerKm = parseFloat(row.price_per_km) || 10000;
+
+      // Tính tổng tiền theo công thức combo tích lũy toàn kỳ
+      let totalAmountCombo;
+      if (!threshold || threshold === 0) {
+        // Không có combo → tính theo đơn giá xe
+        totalAmountCombo = totalKm * pricePerKm;
+      } else if (totalKm <= threshold) {
+        totalAmountCombo = totalKm * comboPrice;
+      } else {
+        totalAmountCombo = (threshold * comboPrice) + ((totalKm - threshold) * afterPrice);
+      }
+
+      const minAmount = threshold * comboPrice;
       const isBelow = totalAmountActual < minAmount;
       const finalAmount = isBelow ? minAmount : totalAmountActual;
       const adjustment = isBelow ? (minAmount - totalAmountActual) : 0;
@@ -701,9 +717,11 @@ router.get('/combo-min-check', requireRole('admin', 'fleet_manager', 'accountant
         customer_short_name: row.customer_short_name,
         combo_km_threshold: threshold,
         combo_price: comboPrice,
-        price_per_km_after: parseFloat(row.price_per_km_after) || 0,
-        total_km_in_period: parseFloat(row.total_km_in_period) || 0,
+        price_per_km_after: afterPrice,
+        price_per_km: pricePerKm,
+        total_km_in_period: totalKm,
         total_amount_actual: totalAmountActual,
+        total_amount_combo: Math.round(totalAmountCombo),
         min_amount: minAmount,
         final_amount: finalAmount,
         is_below_minimum: isBelow,
