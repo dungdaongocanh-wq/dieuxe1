@@ -192,6 +192,26 @@ function initializeDatabase() {
     db.exec('ALTER TABLE schedules ADD COLUMN rejection_reason TEXT');
   }
 
+  // Bảng nhật ký nạp nhiên liệu
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fuel_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      driver_id INTEGER NOT NULL,
+      vehicle_id INTEGER NOT NULL,
+      refuel_date TEXT NOT NULL,
+      liters REAL NOT NULL,
+      unit_price REAL NOT NULL,
+      total_cost REAL NOT NULL,
+      attachment TEXT,
+      attachment_name TEXT,
+      attachment_type TEXT,
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (driver_id) REFERENCES users(id),
+      FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+    )
+  `);
+
   // Bảng cấu hình giá theo xe / khách hàng
   db.exec(`
     CREATE TABLE IF NOT EXISTS customer_vehicle_pricing (

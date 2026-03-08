@@ -45,6 +45,7 @@ function Navbar() {
     const items = [
       { path: '/dashboard', label: '📊 Tổng Quan', roles: ['admin', 'accountant', 'fleet_manager', 'driver'] },
       { path: '/schedules', label: '📋 Lịch Trình', roles: ['admin', 'accountant', 'fleet_manager', 'driver', 'customer'] },
+      { path: '/fuel', label: '⛽ Nhiên Liệu', roles: ['admin', 'fleet_manager', 'accountant', 'driver'] },
       { path: '/vehicles', label: '🚗 Phương Tiện', roles: ['admin', 'fleet_manager'] },
       { path: '/customers', label: '🏢 Khách Hàng', roles: ['admin', 'fleet_manager'] },
       { path: '/customers/stats', label: '📈 TK Khách Hàng', roles: ['admin', 'accountant', 'fleet_manager'] },
