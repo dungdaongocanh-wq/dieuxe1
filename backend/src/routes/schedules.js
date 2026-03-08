@@ -781,12 +781,13 @@ router.post('/recalculate', requireRole('admin'), (req, res) => {
 
       // Tính lại amount
       const vehicleData = { price_per_km: schedule.price_per_km, fuel_rate: schedule.fuel_rate };
-      const new_amount = calcAmount(schedule.km_total, vehicleData, pricing, kmUsedInPeriod);
+      const new_amount_rounded = Math.round(calcAmount(schedule.km_total, vehicleData, pricing, kmUsedInPeriod));
       const fuelRate = schedule.fuel_rate || 8.5;
       const new_fuel_consumed = schedule.km_total * fuelRate / 100;
 
       const old_amount = schedule.amount_before_tax;
-      const changed = Math.round(new_amount) !== Math.round(old_amount || 0);
+      const old_amount_rounded = old_amount != null ? Math.round(old_amount) : null;
+      const changed = new_amount_rounded !== old_amount_rounded;
 
       results.push({
         id: schedule.id,
@@ -794,7 +795,7 @@ router.post('/recalculate', requireRole('admin'), (req, res) => {
         license_plate: schedule.license_plate,
         driver_name: schedule.driver_name,
         old_amount: old_amount,
-        new_amount: Math.round(new_amount),
+        new_amount: new_amount_rounded,
         changed
       });
 
@@ -802,7 +803,7 @@ router.post('/recalculate', requireRole('admin'), (req, res) => {
       if (!dry_run) {
         db.prepare(
           'UPDATE schedules SET amount_before_tax = ?, fuel_consumed = ? WHERE id = ?'
-        ).run(Math.round(new_amount), new_fuel_consumed, schedule.id);
+        ).run(new_amount_rounded, new_fuel_consumed, schedule.id);
       }
     }
 
