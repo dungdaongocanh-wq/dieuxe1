@@ -164,22 +164,24 @@ function MonthlyReport() {
     if (comboMinCheck.length > 0) {
       rows.push([]);
       rows.push(['KIỂM TRA PHÍ TỐI THIỂU COMBO', '', '', '', '', '', '', '', '']);
-      rows.push(['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Phí Thực Tế (VNĐ)', 'Phí Tối Thiểu (VNĐ)', 'Phí Quyết Toán (VNĐ)', 'Chênh Lệch (VNĐ)', '', '']);
+      rows.push(['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Tiền Combo Kỳ (VNĐ)', 'Phí Thực Tế (VNĐ)', 'Phí Tối Thiểu (VNĐ)', 'Phí Quyết Toán (VNĐ)', 'Chênh Lệch (VNĐ)', '']);
       comboMinCheck.forEach(r => {
         rows.push([
           r.license_plate,
           r.customer_short_name || '',
           r.total_km_in_period.toFixed(1),
+          r.total_amount_combo?.toFixed(0) || '0',
           r.total_amount_actual.toFixed(0),
           r.min_amount.toFixed(0),
           r.final_amount.toFixed(0),
           r.is_below_minimum ? r.adjustment.toFixed(0) : '0',
-          '', ''
+          ''
         ]);
       });
+      const totalCombo = comboMinCheck.reduce((s, r) => s + (r.total_amount_combo || 0), 0);
       const totalFinal = comboMinCheck.reduce((s, r) => s + r.final_amount, 0);
       const totalAdj = comboMinCheck.reduce((s, r) => s + r.adjustment, 0);
-      rows.push(['', '', '', '', 'TỔNG', totalFinal.toFixed(0), totalAdj.toFixed(0), '', '']);
+      rows.push(['', '', 'TỔNG', totalCombo.toFixed(0), '', '', totalFinal.toFixed(0), totalAdj.toFixed(0), '']);
     }
 
     const csvContent = [headers, ...rows]
@@ -330,6 +332,19 @@ function MonthlyReport() {
             </div>
           )}
 
+          {/* Thẻ doanh thu combo kỳ */}
+          {comboMinCheck.length > 0 && (
+            <div className="bg-white rounded-xl shadow p-5 border-l-4 border-emerald-500">
+              <p className="text-xs text-gray-500 font-medium">Doanh Thu Combo Kỳ</p>
+              <p className="text-xl font-bold text-gray-800 mt-1">
+                {new Intl.NumberFormat('vi-VN').format(
+                  comboMinCheck.reduce((s, r) => s + (r.total_amount_combo || 0), 0)
+                )}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">VNĐ (tính theo combo tích lũy)</p>
+            </div>
+          )}
+
           {/* Kiểm tra phí tối thiểu combo */}
           {comboMinCheck.length > 0 && (
             <div className="bg-white rounded-xl shadow">
@@ -345,7 +360,7 @@ function MonthlyReport() {
                 <table className="w-full min-w-[800px]">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Phí Thực Tế', 'Phí Tối Thiểu', 'Phí Quyết Toán', 'Chênh Lệch'].map(h => (
+                      {['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Tiền Combo Kỳ', 'Phí Thực Tế', 'Phí Tối Thiểu', 'Phí Quyết Toán', 'Chênh Lệch'].map(h => (
                         <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -358,6 +373,14 @@ function MonthlyReport() {
                         </td>
                         <td className="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">{r.customer_short_name || '—'}</td>
                         <td className="px-3 py-3 text-sm font-semibold text-blue-700 text-right">{r.total_km_in_period.toFixed(1)} km</td>
+                        <td className="px-3 py-3 text-sm font-semibold text-emerald-700 text-right whitespace-nowrap">
+                          {fmtCurrency(r.total_amount_combo)}
+                          <div className="text-xs font-normal text-gray-400 mt-0.5">
+                            {r.combo_km_threshold
+                              ? `${r.combo_km_threshold.toLocaleString('vi-VN')} km × ${r.combo_price.toLocaleString('vi-VN')} + vượt ${r.price_per_km_after.toLocaleString('vi-VN')} đ/km`
+                              : `${r.price_per_km.toLocaleString('vi-VN')} đ/km`}
+                          </div>
+                        </td>
                         <td className="px-3 py-3 text-sm text-gray-700 text-right whitespace-nowrap">{fmtCurrency(r.total_amount_actual)}</td>
                         <td className="px-3 py-3 text-sm text-gray-700 text-right whitespace-nowrap">{fmtCurrency(r.min_amount)}</td>
                         <td className={`px-3 py-3 text-sm font-bold text-right whitespace-nowrap ${r.is_below_minimum ? 'text-red-600' : 'text-green-700'}`}>
@@ -371,7 +394,16 @@ function MonthlyReport() {
                   </tbody>
                   <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                     <tr>
-                      <td colSpan={5} className="px-3 py-3 text-sm font-bold text-gray-700 text-right">TỔNG CỘNG:</td>
+                      <td colSpan={3} className="px-3 py-3 text-sm font-bold text-gray-700 text-right">TỔNG CỘNG:</td>
+                      <td className="px-3 py-3 text-sm font-bold text-emerald-700 text-right whitespace-nowrap">
+                        {fmtCurrency(comboMinCheck.reduce((s, r) => s + (r.total_amount_combo || 0), 0))}
+                      </td>
+                      <td className="px-3 py-3 text-sm font-bold text-gray-700 text-right whitespace-nowrap">
+                        {fmtCurrency(comboMinCheck.reduce((s, r) => s + r.total_amount_actual, 0))}
+                      </td>
+                      <td className="px-3 py-3 text-sm font-bold text-gray-700 text-right whitespace-nowrap">
+                        {fmtCurrency(comboMinCheck.reduce((s, r) => s + r.min_amount, 0))}
+                      </td>
                       <td className="px-3 py-3 text-sm font-bold text-green-800 text-right whitespace-nowrap">
                         {fmtCurrency(comboMinCheck.reduce((s, r) => s + r.final_amount, 0))}
                       </td>
