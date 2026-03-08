@@ -9,10 +9,13 @@ export default defineConfig({
     proxy: {
       // Chuyển tiếp tất cả requests /api đến backend
       '/api': {
-        target: 'http://localhost:5000',
+        target: process.env.VITE_API_URL || 'http://localhost:3001',
         changeOrigin: true,
         secure: false
       }
     }
+  },
+  build: {
+    outDir: 'dist'
   }
 })

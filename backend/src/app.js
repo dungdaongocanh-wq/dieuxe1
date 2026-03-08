@@ -5,7 +5,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 // Rate limiter cho route đăng nhập (nghiêm ngặt hơn)
 const authLimiter = rateLimit({
@@ -27,7 +27,11 @@ const apiLimiter = rateLimit({
 
 // Middleware xử lý JSON và CORS
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
   credentials: true
 }));
 app.use(express.json());
@@ -36,6 +40,11 @@ app.use(express.urlencoded({ extended: true }));
 // Áp dụng rate limiter cho tất cả API
 app.use('/api/', apiLimiter);
 
+// Route kiểm tra server (health check cho Railway)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Đăng ký các routes API
 app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/schedules', require('./routes/schedules'));
@@ -43,11 +52,6 @@ app.use('/api/vehicles', require('./routes/vehicles'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/fuel-logs', require('./routes/fuelLogs'));
-
-// Route kiểm tra server
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Server đang hoạt động bình thường' });
-});
 
 // Xử lý route không tồn tại
 app.use((req, res) => {
