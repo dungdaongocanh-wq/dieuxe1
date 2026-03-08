@@ -1,6 +1,7 @@
 // Component báo cáo tháng - tổng hợp lịch trình theo tháng
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getPeriodFromMonth } from '../utils/billing';
 
 // Lấy tháng hiện tại dạng YYYY-MM
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -26,6 +27,7 @@ function MonthlyReport() {
   const [drivers, setDrivers] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [comboMinCheck, setComboMinCheck] = useState([]);
 
   const [filters, setFilters] = useState({
     month: getCurrentMonth(),
@@ -74,6 +76,22 @@ function MonthlyReport() {
         const data = await res.json();
         setSchedules(data.schedules || []);
         setSummary(data.summary || null);
+      }
+
+      // Tải dữ liệu kiểm tra phí tối thiểu combo
+      if (filters.month) {
+        const { periodStart, periodEnd } = getPeriodFromMonth(filters.month);
+        const comboParams = new URLSearchParams({ period_start: periodStart, period_end: periodEnd });
+        if (filters.vehicle_id) comboParams.append('vehicle_id', filters.vehicle_id);
+        if (filters.customer_id) comboParams.append('customer_id', filters.customer_id);
+        const comboRes = await fetch(`/api/schedules/combo-min-check?${comboParams}`, {
+          headers: getAuthHeaders()
+        });
+        if (comboRes.ok) {
+          setComboMinCheck(await comboRes.json());
+        } else {
+          setComboMinCheck([]);
+        }
       }
     } catch (err) {
       console.error('Lỗi khi tải báo cáo tháng:', err);
@@ -130,6 +148,28 @@ function MonthlyReport() {
         (summary.total_fuel_consumed || 0).toFixed(2),
         '', ''
       ]);
+    }
+
+    // Section kiểm tra phí tối thiểu combo
+    if (comboMinCheck.length > 0) {
+      rows.push([]);
+      rows.push(['KIỂM TRA PHÍ TỐI THIỂU COMBO', '', '', '', '', '', '', '', '']);
+      rows.push(['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Phí Thực Tế (VNĐ)', 'Phí Tối Thiểu (VNĐ)', 'Phí Quyết Toán (VNĐ)', 'Chênh Lệch (VNĐ)', '', '']);
+      comboMinCheck.forEach(r => {
+        rows.push([
+          r.license_plate,
+          r.customer_short_name || '',
+          r.total_km_in_period.toFixed(1),
+          r.total_amount_actual.toFixed(0),
+          r.min_amount.toFixed(0),
+          r.final_amount.toFixed(0),
+          r.is_below_minimum ? r.adjustment.toFixed(0) : '0',
+          '', ''
+        ]);
+      });
+      const totalFinal = comboMinCheck.reduce((s, r) => s + r.final_amount, 0);
+      const totalAdj = comboMinCheck.reduce((s, r) => s + r.adjustment, 0);
+      rows.push(['', '', '', '', 'TỔNG', totalFinal.toFixed(0), totalAdj.toFixed(0), '', '']);
     }
 
     const csvContent = [headers, ...rows]
@@ -259,6 +299,63 @@ function MonthlyReport() {
                   {(summary.total_fuel_consumed || 0).toFixed(2)}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">lít</p>
+              </div>
+            </div>
+          )}
+
+          {/* Kiểm tra phí tối thiểu combo */}
+          {comboMinCheck.length > 0 && (
+            <div className="bg-white rounded-xl shadow">
+              <div className="p-5 border-b">
+                <h2 className="text-lg font-semibold text-gray-800">⚠️ Kiểm Tra Phí Tối Thiểu Combo</h2>
+                {comboMinCheck[0] && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Kỳ: {comboMinCheck[0].period_start} → {comboMinCheck[0].period_end}
+                  </p>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['BKS', 'Khách Hàng', 'Tổng KM Kỳ', 'Phí Thực Tế', 'Phí Tối Thiểu', 'Phí Quyết Toán', 'Chênh Lệch'].map(h => (
+                        <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {comboMinCheck.map((r, i) => (
+                      <tr key={i} className={r.is_below_minimum ? 'bg-yellow-50' : 'hover:bg-gray-50'}>
+                        <td className="px-3 py-3 text-sm">
+                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono text-xs">{r.license_plate}</span>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-700 whitespace-nowrap">{r.customer_short_name || '—'}</td>
+                        <td className="px-3 py-3 text-sm font-semibold text-blue-700 text-right">{r.total_km_in_period.toFixed(1)} km</td>
+                        <td className="px-3 py-3 text-sm text-gray-700 text-right whitespace-nowrap">{fmtCurrency(r.total_amount_actual)}</td>
+                        <td className="px-3 py-3 text-sm text-gray-700 text-right whitespace-nowrap">{fmtCurrency(r.min_amount)}</td>
+                        <td className={`px-3 py-3 text-sm font-bold text-right whitespace-nowrap ${r.is_below_minimum ? 'text-red-600' : 'text-green-700'}`}>
+                          {r.is_below_minimum && '⚠️ '}{fmtCurrency(r.final_amount)}
+                        </td>
+                        <td className={`px-3 py-3 text-sm font-semibold text-right whitespace-nowrap ${r.is_below_minimum ? 'text-red-600' : 'text-gray-400'}`}>
+                          {r.is_below_minimum ? fmtCurrency(r.adjustment) : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                      <td colSpan={5} className="px-3 py-3 text-sm font-bold text-gray-700 text-right">TỔNG CỘNG:</td>
+                      <td className="px-3 py-3 text-sm font-bold text-green-800 text-right whitespace-nowrap">
+                        {fmtCurrency(comboMinCheck.reduce((s, r) => s + r.final_amount, 0))}
+                      </td>
+                      <td className="px-3 py-3 text-sm font-bold text-red-700 text-right whitespace-nowrap">
+                        {comboMinCheck.some(r => r.is_below_minimum)
+                          ? fmtCurrency(comboMinCheck.reduce((s, r) => s + r.adjustment, 0))
+                          : '—'}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           )}

@@ -43,7 +43,7 @@ function ScheduleForm() {
   /**
    * Cập nhật giá chuyến đi bằng cách gọi API pricing-preview
    */
-  const updatePricing = async (kmStart, kmEnd, vehicleId, customerId, vehicle) => {
+  const updatePricing = async (kmStart, kmEnd, vehicleId, customerId, vehicle, tripDate, scheduleId) => {
     const start = parseFloat(kmStart) || 0;
     const end = parseFloat(kmEnd) || 0;
     if (end <= start || end === 0) {
@@ -58,8 +58,9 @@ function ScheduleForm() {
     // Nếu có vehicleId, gọi API để lấy giá chính xác
     if (vehicleId) {
       try {
-        const params = new URLSearchParams({ vehicle_id: vehicleId, km_total: total });
+        const params = new URLSearchParams({ vehicle_id: vehicleId, km_total: total, trip_date: tripDate || formData.trip_date });
         if (customerId) params.append('customer_id', customerId);
+        if (scheduleId) params.append('schedule_id', scheduleId);
         const res = await fetch(`/api/schedules/pricing-preview?${params}`, {
           headers: getAuthHeaders()
         });
@@ -150,7 +151,7 @@ function ScheduleForm() {
           });
           // Tải lại pricing info nếu có vehicle_id
           if (schedule.vehicle_id && schedule.km_total != null) {
-            updatePricing(schedule.km_start, schedule.km_end, schedule.vehicle_id, schedule.customer_id, veh);
+            updatePricing(schedule.km_start, schedule.km_end, schedule.vehicle_id, schedule.customer_id, veh, schedule.trip_date, parseInt(id));
           }
         }
       }
@@ -175,20 +176,25 @@ function ScheduleForm() {
     if (name === 'vehicle_id') {
       const veh = vehicles.find(v => v.id === parseInt(value));
       setSelectedVehicle(veh || null);
-      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, veh);
+      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, veh, newData.trip_date, isEdit ? parseInt(id) : null);
     }
 
     // Tự động tính tổng Km và giá khi km_start hoặc km_end thay đổi
     if (name === 'km_start') {
-      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle);
+      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle, newData.trip_date, isEdit ? parseInt(id) : null);
     }
     if (name === 'km_end') {
-      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle);
+      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle, newData.trip_date, isEdit ? parseInt(id) : null);
     }
 
     // Tính lại giá khi thay đổi khách hàng
     if (name === 'customer_id') {
-      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle);
+      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle, newData.trip_date, isEdit ? parseInt(id) : null);
+    }
+
+    // Tính lại giá khi thay đổi ngày chuyến (ảnh hưởng đến kỳ thanh toán)
+    if (name === 'trip_date') {
+      updatePricing(newData.km_start, newData.km_end, newData.vehicle_id, newData.customer_id, selectedVehicle, newData.trip_date, isEdit ? parseInt(id) : null);
     }
   };
 
@@ -455,12 +461,21 @@ function ScheduleForm() {
               className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
             />
             {pricingInfo && (
-              <p className="text-xs text-gray-500 mt-1">
-                {pricingInfo.pricing_type === 'combo'
-                  ? `Gói combo: ${pricingInfo.pricing_detail.combo_km_threshold} km × ${Number(pricingInfo.pricing_detail.combo_price).toLocaleString('vi-VN')} VNĐ/km, vượt: ${Number(pricingInfo.pricing_detail.price_per_km_after).toLocaleString('vi-VN')} VNĐ/km`
-                  : `Đơn giá: ${Number(pricingInfo.pricing_detail.price_per_km).toLocaleString('vi-VN')} VNĐ/km`
-                }
-              </p>
+              <div className="mt-1 text-xs text-gray-500 space-y-0.5">
+                {pricingInfo.pricing_type === 'combo' ? (
+                  <>
+                    <p>Gói combo: {pricingInfo.pricing_detail.combo_km_threshold} km × {Number(pricingInfo.pricing_detail.combo_price).toLocaleString('vi-VN')} VNĐ/km, vượt: {Number(pricingInfo.pricing_detail.price_per_km_after).toLocaleString('vi-VN')} VNĐ/km</p>
+                    {pricingInfo.billing_period && (
+                      <p>Kỳ thanh toán: {pricingInfo.billing_period.periodStart} → {pricingInfo.billing_period.periodEnd}</p>
+                    )}
+                    {pricingInfo.km_used_in_period != null && (
+                      <p>KM đã chạy trong kỳ (trước chuyến này): {Number(pricingInfo.km_used_in_period).toFixed(1)} km</p>
+                    )}
+                  </>
+                ) : (
+                  <p>Đơn giá: {Number(pricingInfo.pricing_detail.price_per_km).toLocaleString('vi-VN')} VNĐ/km</p>
+                )}
+              </div>
             )}
           </div>
 

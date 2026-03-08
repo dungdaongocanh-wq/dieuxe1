@@ -9,13 +9,65 @@ const { requireRole } = require('../middleware/roleCheck');
 router.use(authenticateToken);
 
 /**
+ * Tính kỳ thanh toán từ ngày chuyến đi
+ * Kỳ = từ ngày 26 tháng trước → ngày 25 tháng hiện tại
+ * @param {string} tripDate - Ngày chuyến đi dạng YYYY-MM-DD
+ * @returns {{ periodStart: string, periodEnd: string }}
+ */
+function getBillingPeriod(tripDate) {
+  const d = new Date(tripDate + 'T00:00:00');
+  const day = d.getDate();
+  const month = d.getMonth(); // 0-indexed
+  const year = d.getFullYear();
+
+  let periodStart, periodEnd;
+  if (day >= 26) {
+    // Từ ngày 26 tháng này → ngày 25 tháng sau
+    periodStart = new Date(year, month, 26);
+    periodEnd = new Date(year, month + 1, 25);
+  } else {
+    // Từ ngày 26 tháng trước → ngày 25 tháng này
+    periodStart = new Date(year, month - 1, 26);
+    periodEnd = new Date(year, month, 25);
+  }
+
+  const fmt = (dt) => dt.toISOString().split('T')[0];
+  return { periodStart: fmt(periodStart), periodEnd: fmt(periodEnd) };
+}
+
+/**
+ * Lấy tổng km xe đã chạy trong kỳ thanh toán (không tính chuyến bị rejected)
+ * @param {number} vehicleId
+ * @param {string} periodStart - YYYY-MM-DD
+ * @param {string} periodEnd - YYYY-MM-DD
+ * @param {number|null} excludeScheduleId - Loại trừ chuyến đang sửa
+ * @returns {number}
+ */
+function getKmUsedInPeriod(vehicleId, periodStart, periodEnd, excludeScheduleId = null) {
+  let sql = `SELECT COALESCE(SUM(km_total), 0) as total_km
+             FROM schedules
+             WHERE vehicle_id = ?
+               AND status != 'rejected'
+               AND trip_date >= ?
+               AND trip_date <= ?`;
+  const params = [vehicleId, periodStart, periodEnd];
+  if (excludeScheduleId) {
+    sql += ' AND id != ?';
+    params.push(excludeScheduleId);
+  }
+  const row = db.prepare(sql).get(...params);
+  return row ? (row.total_km || 0) : 0;
+}
+
+/**
  * Tính tiền chuyến đi dựa trên km và cấu hình giá
- * @param {number} kmTotal - Tổng số km
+ * @param {number} kmTotal - Tổng số km chuyến này
  * @param {object} vehicle - Thông tin xe { price_per_km, fuel_rate }
  * @param {object|null} pricing - Cấu hình giá { combo_km_threshold, combo_price, price_per_km_after } hoặc null
+ * @param {number} kmUsedInPeriod - Tổng km xe đã chạy trong kỳ (không tính chuyến này)
  * @returns {number} Số tiền trước thuế
  */
-function calcAmount(kmTotal, vehicle, pricing) {
+function calcAmount(kmTotal, vehicle, pricing, kmUsedInPeriod = 0) {
   const km = parseFloat(kmTotal) || 0;
   if (!pricing || !pricing.combo_km_threshold || pricing.combo_km_threshold === 0) {
     // Không có combo → tính theo đơn giá xe
@@ -24,12 +76,21 @@ function calcAmount(kmTotal, vehicle, pricing) {
   const threshold = parseFloat(pricing.combo_km_threshold);
   const comboPrice = parseFloat(pricing.combo_price) || 0;
   const afterPrice = parseFloat(pricing.price_per_km_after) || 0;
-  if (km <= threshold) {
-    // Gói tối thiểu cố định
-    return threshold * comboPrice;
+  const kmBefore = parseFloat(kmUsedInPeriod) || 0;
+  const kmAfter = kmBefore + km;
+
+  if (kmBefore >= threshold) {
+    // Đã vượt ngưỡng combo từ trước → toàn bộ chuyến tính afterPrice
+    return km * afterPrice;
+  } else if (kmAfter <= threshold) {
+    // Chưa vượt ngưỡng → toàn bộ chuyến tính comboPrice
+    return km * comboPrice;
+  } else {
+    // Cắt ngang ngưỡng combo
+    const kmInCombo = threshold - kmBefore;
+    const kmOverCombo = kmAfter - threshold;
+    return (kmInCombo * comboPrice) + (kmOverCombo * afterPrice);
   }
-  // Vượt ngưỡng combo
-  return (threshold * comboPrice) + ((km - threshold) * afterPrice);
 }
 
 /**
@@ -243,8 +304,11 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
         'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
       ).get(customer_id, vehicle_id);
     }
+    // Tính km xe đã chạy trong kỳ thanh toán (không tính chuyến này)
+    const { periodStart, periodEnd } = getBillingPeriod(trip_date);
+    const kmUsedInPeriod = getKmUsedInPeriod(vehicle_id, periodStart, periodEnd);
     // Tính thành tiền theo công thức đúng
-    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing);
+    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing, kmUsedInPeriod);
     const fuelRate = vehicleData ? (vehicleData.fuel_rate || 8.5) : 8.5;
     const fuel_consumed = km_total * fuelRate / 100;
 
@@ -276,12 +340,12 @@ router.post('/', requireRole('admin', 'fleet_manager', 'driver'), (req, res) => 
 
 /**
  * GET /api/schedules/pricing-preview
- * Preview giá chuyến dựa trên xe, khách hàng, và số km
- * Query params: vehicle_id, customer_id (optional), km_total
+ * Preview giá chuyến dựa trên xe, khách hàng, số km và ngày chuyến
+ * Query params: vehicle_id, customer_id (optional), km_total, trip_date (optional, default hôm nay), schedule_id (optional)
  */
 router.get('/pricing-preview', (req, res) => {
   try {
-    const { vehicle_id, customer_id, km_total } = req.query;
+    const { vehicle_id, customer_id, km_total, trip_date, schedule_id } = req.query;
     if (!vehicle_id || !km_total) {
       return res.status(400).json({ message: 'Thiếu vehicle_id hoặc km_total' });
     }
@@ -295,12 +359,18 @@ router.get('/pricing-preview', (req, res) => {
         'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
       ).get(customer_id, vehicle_id);
     }
-    const amount = calcAmount(parseFloat(km_total), vehicle, pricing);
+    // Tính kỳ thanh toán và km đã dùng trong kỳ
+    const effectiveTripDate = trip_date || new Date().toISOString().split('T')[0];
+    const billingPeriod = getBillingPeriod(effectiveTripDate);
+    const kmUsedInPeriod = getKmUsedInPeriod(vehicle_id, billingPeriod.periodStart, billingPeriod.periodEnd, schedule_id || null);
+    const amount = calcAmount(parseFloat(km_total), vehicle, pricing, kmUsedInPeriod);
     const pricingType = (pricing && pricing.combo_km_threshold > 0) ? 'combo' : 'per_km';
     res.json({
       amount_before_tax: parseFloat(amount.toFixed(0)),
       pricing_type: pricingType,
-      pricing_detail: pricing || { price_per_km: vehicle.price_per_km }
+      pricing_detail: pricing || { price_per_km: vehicle.price_per_km },
+      km_used_in_period: kmUsedInPeriod,
+      billing_period: billingPeriod
     });
   } catch (err) {
     console.error('Lỗi khi preview giá:', err);
@@ -361,8 +431,12 @@ router.put('/:id', (req, res) => {
         'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
       ).get(actualCustomerId, actualVehicleId);
     }
+    // Tính km xe đã chạy trong kỳ thanh toán (loại trừ chuyến đang sửa)
+    const actualTripDate = trip_date || schedule.trip_date;
+    const { periodStart, periodEnd } = getBillingPeriod(actualTripDate);
+    const kmUsedInPeriod = getKmUsedInPeriod(actualVehicleId, periodStart, periodEnd, id);
     // Tính thành tiền theo công thức đúng
-    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing);
+    const amount_before_tax = calcAmount(km_total, vehicleData || {}, pricing, kmUsedInPeriod);
     const fuelRate = vehicleData ? (vehicleData.fuel_rate || 8.5) : 8.5;
     const fuel_consumed = km_total * fuelRate / 100;
 
@@ -543,6 +617,105 @@ router.patch('/:id/status', authenticateToken, (req, res) => {
     res.json(updated);
   } catch (err) {
     console.error('Lỗi khi cập nhật trạng thái:', err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+});
+
+/**
+ * GET /api/schedules/combo-min-check
+ * Kiểm tra phí tối thiểu combo cho từng xe trong một kỳ thanh toán
+ * Query params: period_start, period_end (hoặc month YYYY-MM), vehicle_id (optional), customer_id (optional)
+ */
+router.get('/combo-min-check', requireRole('admin', 'fleet_manager', 'accountant'), (req, res) => {
+  try {
+    let { period_start, period_end, month, vehicle_id, customer_id } = req.query;
+
+    // Tính kỳ từ tháng nếu không có period_start/period_end
+    if (month && (!period_start || !period_end)) {
+      const [yr, mo] = month.split('-').map(Number);
+      const prevMonth = mo === 1 ? 12 : mo - 1;
+      const prevYear = mo === 1 ? yr - 1 : yr;
+      period_start = `${prevYear}-${String(prevMonth).padStart(2, '0')}-26`;
+      period_end = `${yr}-${String(mo).padStart(2, '0')}-25`;
+    }
+
+    if (!period_start || !period_end) {
+      return res.status(400).json({ message: 'Thiếu period_start và period_end (hoặc month)' });
+    }
+
+    const conditions = [
+      's.status != ?',
+      's.trip_date >= ?',
+      's.trip_date <= ?',
+      's.customer_id IS NOT NULL',
+      'cvp.combo_km_threshold > 0'
+    ];
+    const params = ['rejected', period_start, period_end];
+
+    if (vehicle_id) {
+      conditions.push('s.vehicle_id = ?');
+      params.push(vehicle_id);
+    }
+    if (customer_id) {
+      conditions.push('s.customer_id = ?');
+      params.push(customer_id);
+    }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const rows = db.prepare(`
+      SELECT
+        v.id as vehicle_id,
+        v.license_plate,
+        c.id as customer_id,
+        c.short_name as customer_short_name,
+        cvp.combo_km_threshold,
+        cvp.combo_price,
+        cvp.price_per_km_after,
+        COALESCE(SUM(s.km_total), 0) as total_km_in_period,
+        COALESCE(SUM(s.amount_before_tax), 0) as total_amount_actual
+      FROM schedules s
+      JOIN vehicles v ON s.vehicle_id = v.id
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN customer_vehicle_pricing cvp ON cvp.id = (
+        SELECT MAX(id) FROM customer_vehicle_pricing
+        WHERE customer_id = s.customer_id AND vehicle_id = s.vehicle_id
+      )
+      ${where}
+      GROUP BY s.vehicle_id, s.customer_id
+      ORDER BY v.license_plate
+    `).all(...params);
+
+    const result = rows.map(row => {
+      const threshold = parseFloat(row.combo_km_threshold);
+      const comboPrice = parseFloat(row.combo_price) || 0;
+      const minAmount = threshold * comboPrice;
+      const totalAmountActual = parseFloat(row.total_amount_actual) || 0;
+      const isBelow = totalAmountActual < minAmount;
+      const finalAmount = isBelow ? minAmount : totalAmountActual;
+      const adjustment = isBelow ? (minAmount - totalAmountActual) : 0;
+      return {
+        vehicle_id: row.vehicle_id,
+        license_plate: row.license_plate,
+        customer_id: row.customer_id,
+        customer_short_name: row.customer_short_name,
+        combo_km_threshold: threshold,
+        combo_price: comboPrice,
+        price_per_km_after: parseFloat(row.price_per_km_after) || 0,
+        total_km_in_period: parseFloat(row.total_km_in_period) || 0,
+        total_amount_actual: totalAmountActual,
+        min_amount: minAmount,
+        final_amount: finalAmount,
+        is_below_minimum: isBelow,
+        adjustment,
+        period_start,
+        period_end
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error('Lỗi combo-min-check:', err);
     res.status(500).json({ message: 'Lỗi server' });
   }
 });
