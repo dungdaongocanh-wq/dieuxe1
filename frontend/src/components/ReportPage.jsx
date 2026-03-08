@@ -20,6 +20,13 @@ const fmtDate = (dateStr) => {
   return d.toLocaleDateString('vi-VN');
 };
 
+// Format ngày giờ DD/MM/YYYY HH:mm
+const fmtDateTime = (isoStr) => {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr);
+  return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
 function ReportPage() {
   const { getAuthHeaders, user } = useAuth();
   const [schedules, setSchedules] = useState([]);
@@ -124,7 +131,7 @@ function ReportPage() {
     const monthLabel = filters.month || 'all';
     const headers = ['STT', 'Người Lái', 'Ngày', 'BKS', 'Loại Xe', 'Điểm Đi', 'Điểm Đến',
       'Số KM Đi', 'Số KM K.Thúc', 'Tổng KM', 'Thành Tiền Trước Thuế (VNĐ)',
-      'Xăng Tiêu Thụ (lít)', 'Ghi Chú', 'Trạng Thái'];
+      'Ghi Chú', 'Trạng Thái', 'Người Duyệt', 'Ngày Duyệt', 'Lý Do Từ Chối'];
 
     const rows = schedules.map((s, i) => [
       i + 1,
@@ -138,14 +145,23 @@ function ReportPage() {
       s.km_end,
       s.km_total != null ? s.km_total.toFixed(1) : '',
       s.amount_before_tax != null ? s.amount_before_tax.toFixed(0) : '',
-      s.fuel_consumed != null ? s.fuel_consumed.toFixed(2) : '',
       s.notes || '',
-      s.status === 'approved' ? 'Đã duyệt' : s.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt'
+      s.status === 'approved' ? 'Đã duyệt' : s.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt',
+      s.approved_by || '',
+      s.approved_at ? fmtDateTime(s.approved_at) : '',
+      s.rejection_reason || ''
     ]);
 
     // Thêm dòng tổng
     rows.push([]);
-    rows.push(['', '', '', '', '', '', 'TỔNG CỘNG', '', '', totalKm.toFixed(1), totalAmount.toFixed(0), totalFuel.toFixed(2), '', '']);
+    rows.push([
+      /* STT */ '', /* Người Lái */ '', /* Ngày */ '', /* BKS */ '', /* Loại Xe */ '', /* Điểm Đi */ '',
+      /* Điểm Đến */ 'TỔNG CỘNG',
+      /* KM Đi */ '', /* KM Ktúc */ '',
+      /* Tổng KM */ totalKm.toFixed(1),
+      /* Thành Tiền */ totalAmount.toFixed(0),
+      /* Ghi Chú */ '', /* Trạng Thái */ '', /* Người Duyệt */ '', /* Ngày Duyệt */ '', /* Lý Do */ ''
+    ]);
 
     // Section kiểm tra phí tối thiểu combo
     if (comboMinCheck.length > 0) {
@@ -434,7 +450,8 @@ function ReportPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       {['STT', 'Người Lái', 'Ngày', 'BKS', 'Điểm Đi', 'Điểm Đến',
-                        'Tổng KM', 'Thành Tiền', 'Xăng', 'Trạng Thái'].map(h => (
+                        'Tổng KM', 'Thành Tiền', 'Trạng Thái',
+                        'Người Duyệt', 'Ngày Duyệt', 'Ghi Chú'].map(h => (
                         <th key={h} className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -460,9 +477,6 @@ function ReportPage() {
                             ? new Intl.NumberFormat('vi-VN').format(s.amount_before_tax) + ' VNĐ'
                             : '—'}
                         </td>
-                        <td className="px-3 py-3 text-sm text-orange-700 text-right whitespace-nowrap">
-                          {s.fuel_consumed != null ? s.fuel_consumed.toFixed(2) + ' lít' : '—'}
-                        </td>
                         <td className="px-3 py-3">
                           <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
                             s.status === 'approved' ? 'bg-green-100 text-green-800' :
@@ -471,6 +485,11 @@ function ReportPage() {
                           }`}>
                             {s.status === 'approved' ? 'Đã duyệt' : s.status === 'rejected' ? 'Từ chối' : 'Chờ duyệt'}
                           </span>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">{s.approved_by || '—'}</td>
+                        <td className="px-3 py-3 text-sm text-gray-600 whitespace-nowrap">{fmtDateTime(s.approved_at)}</td>
+                        <td className={`px-3 py-3 text-sm whitespace-nowrap ${s.status === 'rejected' ? 'text-red-600' : 'text-gray-600'}`}>
+                          {s.rejection_reason || '—'}
                         </td>
                       </tr>
                     ))}
@@ -482,10 +501,7 @@ function ReportPage() {
                       <td className="px-3 py-3 text-sm font-bold text-green-800 text-right whitespace-nowrap">
                         {new Intl.NumberFormat('vi-VN').format(totalAmount)} VNĐ
                       </td>
-                      <td className="px-3 py-3 text-sm font-bold text-orange-800 text-right whitespace-nowrap">
-                        {totalFuel.toFixed(2)} lít
-                      </td>
-                      <td></td>
+                      <td colSpan={4}></td>
                     </tr>
                   </tfoot>
                 </table>
