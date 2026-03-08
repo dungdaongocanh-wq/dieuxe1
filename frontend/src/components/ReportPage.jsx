@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getPeriodFromMonth } from '../utils/billing';
+import RecalculatePricingModal from './RecalculatePricingModal';
 
 // Lấy tháng hiện tại dạng YYYY-MM
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -26,6 +27,7 @@ function ReportPage() {
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [comboMinCheck, setComboMinCheck] = useState([]);
+  const [showRecalcModal, setShowRecalcModal] = useState(false);
 
   const [filters, setFilters] = useState({
     month: getCurrentMonth(),
@@ -197,7 +199,22 @@ function ReportPage() {
             📥 Xuất Excel (CSV)
           </button>
         )}
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setShowRecalcModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            🔄 Tính lại giá
+          </button>
+        )}
       </div>
+      {showRecalcModal && (
+        <RecalculatePricingModal
+          getAuthHeaders={getAuthHeaders}
+          onClose={() => setShowRecalcModal(false)}
+          onSuccess={() => { setShowRecalcModal(false); fetchSchedules(); }}
+        />
+      )}
 
       {/* Bộ lọc */}
       <div className="bg-white rounded-xl shadow p-4">
