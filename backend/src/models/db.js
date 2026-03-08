@@ -3,12 +3,14 @@ const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 
-// Đường dẫn đến file cơ sở dữ liệu
-const DB_PATH = path.join(__dirname, '../../data/dieuxe.db');
+// Đường dẫn đến file cơ sở dữ liệu (có thể cấu hình qua biến môi trường DB_PATH)
+const DB_PATH = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.join(__dirname, '../../data/dieuxe.db');
 
 // Tạo thư mục data nếu chưa tồn tại
 const fs = require('fs');
-const dataDir = path.join(__dirname, '../../data');
+const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
