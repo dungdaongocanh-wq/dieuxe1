@@ -7,6 +7,15 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Tắt ETag để tránh phản hồi 304 Not Modified
+app.set('etag', false);
+
+// Tắt cache cho tất cả API responses
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // Rate limiter cho route đăng nhập (nghiêm ngặt hơn)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 phút
