@@ -44,23 +44,21 @@ export function AuthProvider({ children }) {
    * Đăng xuất: xóa token và thông tin user
    */
   const logout = async () => {
-    try {
-      // Gọi API logout (tùy chọn)
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-      }
-    } catch {
-      // Bỏ qua lỗi khi gọi API logout
-    } finally {
-      setUser(null);
-      setToken(null);
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('auth_user');
+  try {
+    if (token) {
+      await fetch(`${API}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
     }
-  };
+  } catch {
+  } finally {
+    setUser(null);
+    setToken(null);
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
+  }
+};
 
   /**
    * Tạo headers xác thực cho các API calls
