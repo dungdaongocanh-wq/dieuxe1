@@ -35,14 +35,14 @@ function Login() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        setError(data.message || 'Đăng nhập thất bại');
+      if (data.status !== "ok") {
+        setError(data.message || "Sai tài khoản hoặc mật khẩu");
+        setLoading(false);
         return;
       }
 
-      // Lưu thông tin đăng nhập
       login(data.user, data.token);
-      navigate(from, { replace: true });
+      navigate("/", { replace: true });
     } catch {
       setError('Không thể kết nối đến server. Vui lòng thử lại sau.');
     } finally {
