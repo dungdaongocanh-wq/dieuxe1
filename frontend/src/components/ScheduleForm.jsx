@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 function ScheduleForm() {
   const { id } = useParams(); // Có id = chế độ sửa
@@ -61,7 +62,7 @@ function ScheduleForm() {
         const params = new URLSearchParams({ vehicle_id: vehicleId, km_total: total, trip_date: tripDate || formData.trip_date });
         if (customerId) params.append('customer_id', customerId);
         if (scheduleId) params.append('schedule_id', scheduleId);
-        const res = await fetch(`/api/schedules/pricing-preview?${params}`, {
+        const res = await apiFetch(`/api/schedules/pricing-preview?${params}`, {
           headers: getAuthHeaders()
         });
         if (res.ok) {
@@ -99,18 +100,18 @@ function ScheduleForm() {
     try {
       const headers = getAuthHeaders();
       const promises = [
-        fetch('/api/vehicles', { headers }),
-        fetch('/api/customers', { headers })
+        apiFetch('/api/vehicles', { headers }),
+        apiFetch('/api/customers', { headers })
       ];
 
       // Nếu là admin hoặc fleet_manager, tải danh sách lái xe
       if (['admin', 'fleet_manager'].includes(user?.role)) {
-        promises.push(fetch('/api/users', { headers }));
+        promises.push(apiFetch('/api/users', { headers }));
       }
 
       // Nếu đang sửa, tải dữ liệu lịch trình
       if (isEdit) {
-        promises.push(fetch('/api/schedules', { headers }));
+        promises.push(apiFetch('/api/schedules', { headers }));
       }
 
       const results = await Promise.all(promises);
@@ -232,7 +233,7 @@ function ScheduleForm() {
       delete payload.fuel_consumed;
       delete payload.amount_before_tax;
 
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
         headers: getAuthHeaders(),
         body: JSON.stringify(payload)

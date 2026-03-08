@@ -1,5 +1,6 @@
 // Modal cho admin tính lại giá các chuyến trong khoảng thời gian
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../utils/api';
 
 // Format tiền VND không có hậu tố
 const fmtAmount = (val) => {
@@ -40,8 +41,8 @@ function RecalculatePricingModal({ getAuthHeaders, onClose, onSuccess, defaultDa
   useEffect(() => {
     const headers = getAuthHeaders();
     Promise.all([
-      fetch('/api/vehicles', { headers }),
-      fetch('/api/customers', { headers })
+      apiFetch('/api/vehicles', { headers }),
+      apiFetch('/api/customers', { headers })
     ]).then(async ([vRes, cRes]) => {
       if (vRes.ok) {
         const vData = await vRes.json();
@@ -66,7 +67,7 @@ function RecalculatePricingModal({ getAuthHeaders, onClose, onSuccess, defaultDa
       if (vehicleId) body.vehicle_id = parseInt(vehicleId);
       if (customerId) body.customer_id = parseInt(customerId);
 
-      const res = await fetch('/api/schedules/recalculate', {
+      const res = await apiFetch('/api/schedules/recalculate', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(body)

@@ -1,6 +1,7 @@
 // Component trang báo cáo tháng - tổng hợp theo xe, lái xe
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 import { getPeriodFromMonth } from '../utils/billing';
 import RecalculatePricingModal from './RecalculatePricingModal';
 
@@ -58,7 +59,7 @@ function ReportPage() {
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
 
-      const res = await fetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/schedules?${params}`, { headers: getAuthHeaders() });
       if (res.ok) setSchedules(await res.json());
 
       // Tải dữ liệu kiểm tra phí tối thiểu combo
@@ -66,7 +67,7 @@ function ReportPage() {
         const { periodStart, periodEnd } = getPeriodFromMonth(filters.month);
         const comboParams = new URLSearchParams({ period_start: periodStart, period_end: periodEnd });
         if (filters.vehicle_id) comboParams.append('vehicle_id', filters.vehicle_id);
-        const comboRes = await fetch(`/api/schedules/combo-min-check?${comboParams}`, {
+        const comboRes = await apiFetch(`/api/schedules/combo-min-check?${comboParams}`, {
           headers: getAuthHeaders()
         });
         if (comboRes.ok) {
@@ -85,8 +86,8 @@ function ReportPage() {
   useEffect(() => {
     const headers = getAuthHeaders();
     Promise.all([
-      fetch('/api/vehicles', { headers }),
-      fetch('/api/users', { headers })
+      apiFetch('/api/vehicles', { headers }),
+      apiFetch('/api/users', { headers })
     ]).then(async ([vRes, uRes]) => {
       if (vRes.ok) setVehicles(await vRes.json());
       if (uRes.ok) {
@@ -109,7 +110,7 @@ function ReportPage() {
       const params = new URLSearchParams();
       if (fuelFilters.month) params.append('month', fuelFilters.month);
       if (fuelFilters.vehicle_id) params.append('vehicle_id', fuelFilters.vehicle_id);
-      const res = await fetch(`/api/fuel-logs/stats/monthly?${params}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/fuel-logs/stats/monthly?${params}`, { headers: getAuthHeaders() });
       if (res.ok) setFuelStats(await res.json());
       else setFuelStats([]);
     } catch (err) {

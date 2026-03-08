@@ -1,6 +1,7 @@
 // Component thống kê theo khách hàng
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../utils/api';
 
 const fmtVND = new Intl.NumberFormat('vi-VN');
 
@@ -30,8 +31,8 @@ function CustomerStats() {
     try {
       const headers = getAuthHeaders();
       const [vRes, uRes] = await Promise.all([
-        fetch('/api/vehicles', { headers }),
-        fetch('/api/users', { headers })
+        apiFetch('/api/vehicles', { headers }),
+        apiFetch('/api/users', { headers })
       ]);
       if (vRes.ok) {
         const vData = await vRes.json();
@@ -54,7 +55,7 @@ function CustomerStats() {
       if (filters.vehicle_id) params.append('vehicle_id', filters.vehicle_id);
       if (filters.driver_id) params.append('driver_id', filters.driver_id);
 
-      const res = await fetch(`/api/schedules/stats/by-customer?${params}`, {
+      const res = await apiFetch(`/api/schedules/stats/by-customer?${params}`, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
