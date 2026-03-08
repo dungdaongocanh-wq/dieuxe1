@@ -14,6 +14,7 @@ import CustomerManager from './components/CustomerManager';
 import CustomerStats from './components/CustomerStats';
 import ReportPage from './components/ReportPage';
 import MonthlyReport from './components/MonthlyReport';
+import FuelManager from './components/FuelManager';
 
 /**
  * Layout chính cho các trang được bảo vệ (có Navbar)
@@ -163,6 +164,18 @@ function App() {
               <PrivateRoute allowedRoles={['admin', 'fleet_manager', 'accountant']}>
                 <ProtectedLayout>
                   <MonthlyReport />
+                </ProtectedLayout>
+              </PrivateRoute>
+            }
+          />
+
+          {/* Quản lý nhiên liệu - admin, fleet_manager, accountant, driver */}
+          <Route
+            path="/fuel"
+            element={
+              <PrivateRoute allowedRoles={['admin', 'fleet_manager', 'accountant', 'driver']}>
+                <ProtectedLayout>
+                  <FuelManager />
                 </ProtectedLayout>
               </PrivateRoute>
             }

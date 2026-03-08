@@ -42,6 +42,7 @@ app.use('/api/schedules', require('./routes/schedules'));
 app.use('/api/vehicles', require('./routes/vehicles'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/customers', require('./routes/customers'));
+app.use('/api/fuel-logs', require('./routes/fuelLogs'));
 
 // Route kiểm tra server
 app.get('/api/health', (req, res) => {

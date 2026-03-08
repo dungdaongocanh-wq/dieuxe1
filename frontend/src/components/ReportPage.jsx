@@ -35,6 +35,14 @@ function ReportPage() {
     driver_id: ''
   });
 
+  // State cho thống kê nhiên liệu
+  const [fuelStats, setFuelStats] = useState([]);
+  const [fuelStatsLoading, setFuelStatsLoading] = useState(false);
+  const [fuelFilters, setFuelFilters] = useState({
+    month: getCurrentMonth(),
+    vehicle_id: ''
+  });
+
   const fetchSchedules = useCallback(async () => {
     setLoading(true);
     try {
@@ -84,6 +92,30 @@ function ReportPage() {
   useEffect(() => {
     fetchSchedules();
   }, [fetchSchedules]);
+
+  /**
+   * Lấy thống kê nhiên liệu theo tháng và xe
+   */
+  const fetchFuelStats = useCallback(async () => {
+    setFuelStatsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (fuelFilters.month) params.append('month', fuelFilters.month);
+      if (fuelFilters.vehicle_id) params.append('vehicle_id', fuelFilters.vehicle_id);
+      const res = await fetch(`/api/fuel-logs/stats/monthly?${params}`, { headers: getAuthHeaders() });
+      if (res.ok) setFuelStats(await res.json());
+      else setFuelStats([]);
+    } catch (err) {
+      console.error('Lỗi khi tải thống kê nhiên liệu:', err);
+      setFuelStats([]);
+    } finally {
+      setFuelStatsLoading(false);
+    }
+  }, [fuelFilters, getAuthHeaders]);
+
+  useEffect(() => {
+    fetchFuelStats();
+  }, [fetchFuelStats]);
 
   // Tổng hợp toàn bộ
   const totalKm = schedules.reduce((sum, s) => sum + (s.km_total || 0), 0);
@@ -179,6 +211,36 @@ function ReportPage() {
     const a = document.createElement('a');
     a.href = url;
     a.download = `bao-cao-${monthLabel}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Xuất CSV thống kê nhiên liệu
+   */
+  const handleExportFuelCSV = () => {
+    const monthLabel = fuelFilters.month || 'all';
+    const headers = ['BKS', 'Số Lần Đổ', 'Tổng Lít', 'Tổng Chi Phí (VNĐ)'];
+    const rows = fuelStats.map(r => [
+      r.license_plate,
+      r.refuel_count,
+      r.total_liters != null ? r.total_liters.toFixed(2) : '',
+      r.total_cost != null ? r.total_cost.toFixed(0) : ''
+    ]);
+    const totalLiters = fuelStats.reduce((s, r) => s + (r.total_liters || 0), 0);
+    const totalCost = fuelStats.reduce((s, r) => s + (r.total_cost || 0), 0);
+    const totalCount = fuelStats.reduce((s, r) => s + (r.refuel_count || 0), 0);
+    rows.push(['TỔNG CỘNG', totalCount, totalLiters.toFixed(2), totalCost.toFixed(0)]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nhien-lieu-thang-${monthLabel}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -494,6 +556,105 @@ function ReportPage() {
           </div>
         </>
       )}
+
+      {/* ===== Phần thống kê nhiên liệu ===== */}
+      <div className="bg-white rounded-xl shadow">
+        <div className="p-5 border-b flex items-center justify-between flex-wrap gap-3">
+          <h2 className="text-lg font-semibold text-gray-800">⛽ Thống Kê Nhiên Liệu Theo Tháng</h2>
+          {fuelStats.length > 0 && (
+            <button
+              onClick={handleExportFuelCSV}
+              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              📥 Xuất CSV Nhiên Liệu
+            </button>
+          )}
+        </div>
+
+        {/* Bộ lọc nhiên liệu */}
+        <div className="p-4 border-b bg-gray-50">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tháng</label>
+              <input
+                type="month"
+                value={fuelFilters.month}
+                onChange={e => setFuelFilters(f => ({ ...f, month: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Xe</label>
+              <select
+                value={fuelFilters.vehicle_id}
+                onChange={e => setFuelFilters(f => ({ ...f, vehicle_id: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">— Tất cả xe —</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.license_plate}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {fuelStatsLoading ? (
+          <div className="flex justify-center items-center py-10">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-3 text-gray-500 text-sm">Đang tải...</span>
+          </div>
+        ) : fuelStats.length === 0 ? (
+          <div className="text-center py-10 text-gray-400">
+            <div className="text-4xl mb-2">⛽</div>
+            <p className="text-sm">Không có dữ liệu nhiên liệu trong kỳ này</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['BKS', 'Số Lần Đổ', 'Tổng Lít', 'Tổng Chi Phí (VNĐ)'].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {fuelStats.map(r => (
+                  <tr key={r.vehicle_id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono text-sm font-semibold">
+                        {r.license_plate}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-800">{r.refuel_count}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-orange-700">
+                      {r.total_liters != null ? r.total_liters.toFixed(2) : '—'} lít
+                    </td>
+                    <td className="px-4 py-3 text-sm font-semibold text-green-700">
+                      {fmtCurrency(r.total_cost)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td className="px-4 py-3 text-sm font-bold text-gray-700">TỔNG CỘNG</td>
+                  <td className="px-4 py-3 text-sm font-bold text-gray-800">
+                    {fuelStats.reduce((s, r) => s + r.refuel_count, 0)}
+                  </td>
+                  <td className="px-4 py-3 text-sm font-bold text-orange-800">
+                    {fuelStats.reduce((s, r) => s + (r.total_liters || 0), 0).toFixed(2)} lít
+                  </td>
+                  <td className="px-4 py-3 text-sm font-bold text-green-800">
+                    {fmtCurrency(fuelStats.reduce((s, r) => s + (r.total_cost || 0), 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
