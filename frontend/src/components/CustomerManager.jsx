@@ -247,6 +247,17 @@ function CustomerFormModal({ customerToEdit, onSave, onClose, getAuthHeaders }) 
             </label>
           </div>
 
+          {/* Cảnh báo khi sửa giá */}
+          {customerToEdit && (
+            <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 flex items-start gap-2">
+              <span className="text-yellow-500 text-base mt-0.5">⚠️</span>
+              <p className="text-xs text-yellow-800">
+                <strong>Lưu ý:</strong> Các chuyến đã lưu sẽ <strong>không tự cập nhật</strong> khi bạn thay đổi giá ở đây.
+                Nếu bạn muốn áp dụng giá mới cho một khoảng thời gian nào đó, vui lòng liên hệ <strong>Admin</strong> để sử dụng chức năng "Tính lại giá".
+              </p>
+            </div>
+          )}
+
           {/* Cấu hình đơn giá theo xe */}
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">

@@ -720,4 +720,104 @@ router.get('/combo-min-check', requireRole('admin', 'fleet_manager', 'accountant
   }
 });
 
+/**
+ * POST /api/schedules/recalculate
+ * Tính lại amount_before_tax cho các chuyến trong khoảng thời gian (chỉ admin)
+ * Body: { date_from, date_to, vehicle_id?, customer_id?, dry_run? }
+ */
+router.post('/recalculate', requireRole('admin'), (req, res) => {
+  try {
+    const { date_from, date_to, vehicle_id, customer_id, dry_run } = req.body;
+
+    if (!date_from || !date_to) {
+      return res.status(400).json({ message: 'Thiếu date_from hoặc date_to' });
+    }
+
+    // Xây dựng điều kiện lọc
+    const conditions = [
+      "s.status != 'rejected'",
+      's.trip_date >= ?',
+      's.trip_date <= ?'
+    ];
+    const params = [date_from, date_to];
+
+    if (vehicle_id) {
+      conditions.push('s.vehicle_id = ?');
+      params.push(vehicle_id);
+    }
+    if (customer_id) {
+      conditions.push('s.customer_id = ?');
+      params.push(customer_id);
+    }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    // Lấy danh sách schedules, sort theo trip_date ASC, created_at ASC
+    const schedules = db.prepare(`
+      SELECT s.*, u.full_name as driver_name, v.license_plate, v.fuel_rate, v.price_per_km
+      FROM schedules s
+      JOIN users u ON s.driver_id = u.id
+      JOIN vehicles v ON s.vehicle_id = v.id
+      ${where}
+      ORDER BY s.trip_date ASC, s.created_at ASC
+    `).all(...params);
+
+    const results = [];
+
+    for (const schedule of schedules) {
+      // Lấy pricing config nếu có customer_id
+      let pricing = null;
+      if (schedule.customer_id) {
+        pricing = db.prepare(
+          'SELECT * FROM customer_vehicle_pricing WHERE customer_id = ? AND vehicle_id = ? ORDER BY id DESC LIMIT 1'
+        ).get(schedule.customer_id, schedule.vehicle_id);
+      }
+
+      // Tính kỳ thanh toán cho chuyến này
+      const { periodStart, periodEnd } = getBillingPeriod(schedule.trip_date);
+
+      // Tính km đã dùng trong kỳ (loại trừ chuyến hiện tại, chỉ các chuyến trước trong kỳ)
+      const kmUsedInPeriod = getKmUsedInPeriod(schedule.vehicle_id, periodStart, periodEnd, schedule.id);
+
+      // Tính lại amount
+      const vehicleData = { price_per_km: schedule.price_per_km, fuel_rate: schedule.fuel_rate };
+      const new_amount_rounded = Math.round(calcAmount(schedule.km_total, vehicleData, pricing, kmUsedInPeriod));
+      const fuelRate = schedule.fuel_rate || 8.5;
+      const new_fuel_consumed = schedule.km_total * fuelRate / 100;
+
+      const old_amount = schedule.amount_before_tax;
+      const old_amount_rounded = old_amount != null ? Math.round(old_amount) : null;
+      const changed = new_amount_rounded !== old_amount_rounded;
+
+      results.push({
+        id: schedule.id,
+        trip_date: schedule.trip_date,
+        license_plate: schedule.license_plate,
+        driver_name: schedule.driver_name,
+        old_amount: old_amount,
+        new_amount: new_amount_rounded,
+        changed
+      });
+
+      // Nếu không phải dry_run, cập nhật DB ngay (thứ tự quan trọng)
+      if (!dry_run) {
+        db.prepare(
+          'UPDATE schedules SET amount_before_tax = ?, fuel_consumed = ? WHERE id = ?'
+        ).run(new_amount_rounded, new_fuel_consumed, schedule.id);
+      }
+    }
+
+    res.json({
+      updated_count: results.filter(r => r.changed).length,
+      dry_run: !!dry_run,
+      date_from,
+      date_to,
+      results
+    });
+  } catch (err) {
+    console.error('Lỗi khi tính lại giá:', err);
+    res.status(500).json({ message: 'Lỗi server' });
+  }
+});
+
 module.exports = router;

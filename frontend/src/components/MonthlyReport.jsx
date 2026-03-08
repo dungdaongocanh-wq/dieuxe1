@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getPeriodFromMonth } from '../utils/billing';
+import RecalculatePricingModal from './RecalculatePricingModal';
 
 // Lấy tháng hiện tại dạng YYYY-MM
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
@@ -20,7 +21,7 @@ const fmtDate = (dateStr) => {
 };
 
 function MonthlyReport() {
-  const { getAuthHeaders } = useAuth();
+  const { getAuthHeaders, user } = useAuth();
   const [schedules, setSchedules] = useState([]);
   const [summary, setSummary] = useState(null);
   const [vehicles, setVehicles] = useState([]);
@@ -28,6 +29,7 @@ function MonthlyReport() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [comboMinCheck, setComboMinCheck] = useState([]);
+  const [showRecalcModal, setShowRecalcModal] = useState(false);
 
   const [filters, setFilters] = useState({
     month: getCurrentMonth(),
@@ -202,7 +204,24 @@ function MonthlyReport() {
             📥 Xuất CSV
           </button>
         )}
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setShowRecalcModal(true)}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            🔄 Tính lại giá
+          </button>
+        )}
       </div>
+      {showRecalcModal && (
+        <RecalculatePricingModal
+          getAuthHeaders={getAuthHeaders}
+          onClose={() => setShowRecalcModal(false)}
+          onSuccess={() => { setShowRecalcModal(false); fetchReport(); }}
+          defaultDateFrom={filters.month ? getPeriodFromMonth(filters.month).periodStart : undefined}
+          defaultDateTo={filters.month ? getPeriodFromMonth(filters.month).periodEnd : undefined}
+        />
+      )}
 
       {/* Bộ lọc */}
       <div className="bg-white rounded-xl shadow p-4">
