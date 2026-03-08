@@ -8,6 +8,7 @@ const AuthContext = createContext(null);
  * Provider cung cấp trạng thái xác thực cho toàn bộ ứng dụng
  */
 export function AuthProvider({ children }) {
+  const API = import.meta.env.VITE_API_URL || '';
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);

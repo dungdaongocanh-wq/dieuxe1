@@ -19,7 +19,7 @@ function Login() {
   /**
    * Xử lý sự kiện đăng nhập
    */
-  const API = import.meta.env.VITE_API_URL;
+  const API = import.meta.env.VITE_API_URL || '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,7 +35,7 @@ function Login() {
 
       const data = await response.json();
 
-      if (data.status !== "ok") {
+      if (!response.ok) {
         setError(data.message || "Sai tài khoản hoặc mật khẩu");
         setLoading(false);
         return;
